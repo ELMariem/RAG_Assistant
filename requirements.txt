@@ -1,0 +1,6 @@
+ollama
+chromadb
+sentence-transformers
+docling
+PyMuPDF
+Pillow
