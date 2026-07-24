@@ -25,6 +25,9 @@ TOP_K = 4  # how many chunks ChromaDB returns per question
 
 MAX_HISTORY_TURNS = 5  # how many past question/answer pairs to keep in the conversation buffer
 #filter out tiny figures
-MIN_DIAGRAM_WIDTH_PX = 200
-MIN_DIAGRAM_HEIGHT_PX = 200
-MAX_DIAGRAM_ASPECT_RATIO = 1.7
+PDF_MIN_WIDTH_PX = 80
+PDF_MIN_HEIGHT_PX = 80
+
+DOCX_MIN_WIDTH_PX = 200
+DOCX_MIN_HEIGHT_PX = 200
+DOCX_MAX_ASPECT_RATIO = 1.7

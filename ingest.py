@@ -24,22 +24,23 @@ from docling.document_converter import DocumentConverter
 import config
 SUPPORTED_EXTENSIONS = {".pdf", ".docx"}
 
-def is_significant_figure(image, min_width=200, min_height=200, max_aspect_ratio=1.7) -> bool:
+def is_significant_figure(image: Image.Image, ext: str) -> bool:
     """
-    Keep only real diagrams/charts, filtering out:
-    - tiny equation symbols (too small — min_width/min_height catch these)
-    - multi-symbol equation lines (too elongated — aspect ratio catches these,
-    since a formula renders as one long thin strip, not a square-ish figure)
+    Decide whether an extracted image is a genuine diagram, or noise
+    (equation fragments, decorative icons).
+    PDF: rarely explodes equations into images (confirmed empirically on real
+    documents), so a loose size-only filter is enough to drop stray icons.
+    DOCX: the equation editor DOES explode formulas into image fragments/strips,
+    so it needs the extra aspect-ratio cutoff to separate diagrams from those.
     """
+
     width, height = image.size
-    if width < min_width or height < min_height:
+    if ext == ".pdf":
+        return width >= config.PDF_MIN_WIDTH_PX and height >= config.PDF_MIN_HEIGHT_PX
+    if width < config.DOCX_MIN_WIDTH_PX or height < config.DOCX_MIN_HEIGHT_PX:
         return False
-
-    longer_side = max(width, height)
-    shorter_side = min(width, height)
-    aspect_ratio = longer_side / shorter_side
-
-    return aspect_ratio <= max_aspect_ratio
+    ratio = max(width, height) / min(width, height)
+    return ratio <= config.DOCX_MAX_ASPECT_RATIO
 
 
 def get_page_no(item, default: int = 1) -> int:
@@ -165,21 +166,22 @@ def process_docling_document(file_path: str) -> list[dict]:
 
     # --- Diagrams: crop, caption with context, keep image path for later ---
     os.makedirs(config.FIGURES_DIR, exist_ok=True)
-    skipped_small = 0
+    skipped_noise = 0
+    skipped_unextractable = 0
     for i, picture in enumerate(doc.pictures):
-        bbox = picture.prov[0].bbox if picture.prov else None
-        if bbox is None or not is_significant_figure(bbox):
-            skipped_small += 1
+        image = get_picture_image(doc, picture, file_path, ext)
+
+        if image is None:
+            skipped_unextractable += 1
+            continue
+
+        if not is_significant_figure(image, ext):
+            skipped_noise += 1
             continue
 
         page_no = get_page_no(picture)
-        print(f"  Captioning diagram {i + 1}/{len(doc.pictures)} (page {page_no})...")
+        print(f"  Captioning diagram (page {page_no}, size {image.size})...")
 
-        image = get_picture_image(doc, picture, file_path, ext)
-        if image is None:
-            print(f"    Skipped — could not extract this image.")
-            continue
-        
         image_path = os.path.join(config.FIGURES_DIR, f"{filename}_page{page_no}_fig{i}.png")
         image.save(image_path)
 
@@ -187,14 +189,17 @@ def process_docling_document(file_path: str) -> list[dict]:
         description = describe_diagram_with_context(image_path, context)
 
         blocks.append({
-            "content": description,"type": "diagram",
-            "page": page_no,"source_file": filename,
+            "content": description, "type": "diagram",
+            "page": page_no, "source_file": filename,
             "image_path": image_path  # used at answer time to re-attach the real image
         })
-    print(f"  Skipped {skipped_small} small/decorative figures out of {len(doc.pictures)} detected")
+
+    print(f"  Kept {len(doc.pictures) - skipped_noise - skipped_unextractable} real diagrams "f"(skipped {skipped_noise} noise, {skipped_unextractable} unextractable) out of {len(doc.pictures)} detected")
+
     elapsed = time.time() - start_time
     print(f"--- Finished {filename} in {elapsed:.1f}s, {len(blocks)} blocks ---")
     return blocks
+
 
 
 def embed_and_store(blocks: list[dict], embed_model, client) -> None:
