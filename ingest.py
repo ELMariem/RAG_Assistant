@@ -24,6 +24,32 @@ from docling.document_converter import DocumentConverter
 import config
 SUPPORTED_EXTENSIONS = {".pdf", ".docx"}
 
+def is_significant_figure(image, min_width=200, min_height=200, max_aspect_ratio=1.7) -> bool:
+    """
+    Keep only real diagrams/charts, filtering out:
+    - tiny equation symbols (too small — min_width/min_height catch these)
+    - multi-symbol equation lines (too elongated — aspect ratio catches these,
+    since a formula renders as one long thin strip, not a square-ish figure)
+    """
+    width, height = image.size
+    if width < min_width or height < min_height:
+        return False
+
+    longer_side = max(width, height)
+    shorter_side = min(width, height)
+    aspect_ratio = longer_side / shorter_side
+
+    return aspect_ratio <= max_aspect_ratio
+
+
+def get_page_no(item, default: int = 1) -> int:
+    """
+    Safely get the page number of a Docling item.
+    PDFs always have provenance info; DOCX elements sometimes don't
+    """
+    if item.prov and len(item.prov) > 0:
+        return item.prov[0].page_no
+    return default
 def crop_figure(pdf_path: str, page_no: int, bbox, zoom: float = config.FIGURE_ZOOM) -> Image.Image:
     """
     Render a PDF page as an image and crop out just the figure region.
@@ -53,7 +79,7 @@ def get_surrounding_text(doc, page_no: int, max_chars: int = config.CONTEXT_MAX_
     Collect the plain text on the same page as a figure, so the vision model can
     connect labels in a diagram to concepts explained nearby, instead of describing it blind.
     """
-    page_texts = [t.text for t in doc.texts if t.prov[0].page_no == page_no]
+    page_texts = [t.text for t in doc.texts if get_page_no(t) == page_no]
     return " ".join(page_texts)[:max_chars]
 
 
@@ -121,7 +147,7 @@ def process_docling_document(file_path: str) -> list[dict]:
     for item in doc.texts:
         blocks.append({
             "content": item.text,"type": "text",
-            "page": item.prov[0].page_no,"source_file": filename
+            "page": get_page_no(item),"source_file": filename
         })
 
     # --- Tables: dual storage (sentences for embedding, JSON for precise answers) ---
@@ -131,7 +157,7 @@ def process_docling_document(file_path: str) -> list[dict]:
 
         blocks.append({
             "content": sentence_version,"type": "table",
-            "page": table.prov[0].page_no,"source_file": filename,
+            "page": get_page_no(table),"source_file": filename,
             "structured": json.dumps(records, ensure_ascii=False)  # kept for the LLM at answer time
         })
 
@@ -139,8 +165,14 @@ def process_docling_document(file_path: str) -> list[dict]:
 
     # --- Diagrams: crop, caption with context, keep image path for later ---
     os.makedirs(config.FIGURES_DIR, exist_ok=True)
+    skipped_small = 0
     for i, picture in enumerate(doc.pictures):
-        page_no = picture.prov[0].page_no
+        bbox = picture.prov[0].bbox if picture.prov else None
+        if bbox is None or not is_significant_figure(bbox):
+            skipped_small += 1
+            continue
+
+        page_no = get_page_no(picture)
         print(f"  Captioning diagram {i + 1}/{len(doc.pictures)} (page {page_no})...")
 
         image = get_picture_image(doc, picture, file_path, ext)
@@ -159,7 +191,7 @@ def process_docling_document(file_path: str) -> list[dict]:
             "page": page_no,"source_file": filename,
             "image_path": image_path  # used at answer time to re-attach the real image
         })
-
+    print(f"  Skipped {skipped_small} small/decorative figures out of {len(doc.pictures)} detected")
     elapsed = time.time() - start_time
     print(f"--- Finished {filename} in {elapsed:.1f}s, {len(blocks)} blocks ---")
     return blocks
