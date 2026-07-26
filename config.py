@@ -1,6 +1,9 @@
 # all settings/constants in one place
 import os
 
+from dotenv import load_dotenv
+load_dotenv()
+print("Groq key loaded:", "GROQ_API_KEY" in os.environ)  # should print True if the key is loaded
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DATA_DIR = os.path.join(BASE_DIR, "data", "documents")   # where your source PDFs live
@@ -8,7 +11,7 @@ FIGURES_DIR = os.path.join(BASE_DIR, "data", "figures")  # cropped diagram image
 CHROMA_DIR = os.path.join(BASE_DIR, "chroma_db")         # ChromaDB's persistent storage folder
 
 COLLECTION_NAME = "Alzeheimer"  # name of the ChromaDB collection (change this to switch datasets)
-
+CONTEXT_WINDOW = 8192
 # Generator: answers the user's question using retrieved text + images
 GENERATOR_MODEL = "qwen2.5vl:7b"
 
@@ -31,3 +34,7 @@ PDF_MIN_HEIGHT_PX = 80
 DOCX_MIN_WIDTH_PX = 200
 DOCX_MIN_HEIGHT_PX = 200
 DOCX_MAX_ASPECT_RATIO = 1.7
+
+# LLM BACKEND
+LLM_BACKEND = "ollama"   # "ollama" (local/private) or "groq" (cloud/fast)
+GROQ_MODEL = "llama-3.3-70b-versatile"

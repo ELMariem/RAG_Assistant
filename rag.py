@@ -4,15 +4,32 @@ then ask the generator model to answer using that context (and any attached imag
 """
 
 import base64
-import ollama
 import config
-
+import llm_providers
 
 def encode_image_base64(path: str) -> str:
-    """Read an image file from disk and encode it as base64, ready to send to Ollama."""
+    """Read an image file from disk and encode it as base64."""
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
+    
+#trim dynamically based on real token estimate, not a fixed number (max = top_k=4)
+IMAGE_TOKEN_ESTIMATE = 1000
+def fit_chunks_to_context(chunks: list[dict], max_context_tokens: int, reserved_for_answer: int = 1200) -> list[dict]:
+    budget = max_context_tokens - reserved_for_answer
+    kept = []
+    running_total = 0
 
+    for chunk in chunks:
+        content_tokens = len(chunk["content"]) // 4
+        has_image = chunk["metadata"].get("type") == "diagram" and chunk["metadata"].get("image_path")
+        chunk_tokens = content_tokens + (IMAGE_TOKEN_ESTIMATE if has_image else 0)
+
+        if running_total + chunk_tokens > budget and kept:
+            break
+        kept.append(chunk)
+        running_total += chunk_tokens
+
+    return kept
 
 def retrieve_chunks(query: str, collection, embed_model, top_k: int = None) -> list[dict]:
     """Embed the query and pull back the most similar chunks from ChromaDB."""
@@ -59,13 +76,18 @@ ANSWER:"""
     return prompt, images_b64
 
 
-def generate_answer(query: str, chunks: list[dict]) -> str:
-    """Retrieve-then-generate: build the prompt and call the generator model."""
+def generate_answer(query: str, chunks: list[dict], backend: str = None) -> str:
+    """Retrieve-then-generate: build the prompt and call the configured LLM backend."""
+
+    backend = (backend or config.LLM_BACKEND).lower()
+
+    if backend == "ollama":
+        original_count = len(chunks)
+        chunks = fit_chunks_to_context(chunks, config.CONTEXT_WINDOW)
+        if len(chunks) < original_count:
+            print(f"(Trimmed context: using {len(chunks)}/{original_count} retrieved chunks to fit Ollama's context window)")
+
     prompt, images_b64 = build_prompt(query, chunks)
 
-    message = {"role": "user", "content": prompt}
-    if images_b64:
-        message["images"] = images_b64  # only attached when a diagram was actually retrieved
-
-    response = ollama.chat(model=config.GENERATOR_MODEL, messages=[message])
-    return response["message"]["content"]
+    provider = llm_providers.get_llm_provider(backend)
+    return provider.generate(prompt, images=images_b64)

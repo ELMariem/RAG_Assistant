@@ -60,13 +60,15 @@ def main():
     collection = sync_collection(embed_model, client)
     print(f"Ready in {time.time() - start:.1f}s.\n")
 
+    current_backend = config.LLM_BACKEND
+
     print("Assistant ready. Type 'exit' to quit, 'add + path' to add new documents.\n")
     while True:
         query = input("You: ")
         if query.lower() in ("exit", "quit"):
             break
         if query.lower().startswith("add "):
-            source_path = query[4:].strip().strip('"')  # allows pasting a path with quotes
+            source_path = query[4:].strip().strip('"')  # pasting a path with quotes
             if not os.path.isfile(source_path):
                 print(f"File not found: {source_path}\n")
                 continue
@@ -76,8 +78,13 @@ def main():
             print(f"Copied to data/documents. Checking for new files...")
             collection = sync_collection(embed_model, client)
             continue
+        if query.lower() in ("use ollama", "use groq"):
+            current_backend = query.lower().split()[-1]
+            print(f"Switched to {current_backend} backend.\n")
+            continue
+
         chunks = rag.retrieve_chunks(query, collection, embed_model)
-        answer = rag.generate_answer(query, chunks)
+        answer = rag.generate_answer(query, chunks, backend=current_backend)
         print(f"\nAssistant: {answer}\n")
 
 

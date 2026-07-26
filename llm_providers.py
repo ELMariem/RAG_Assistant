@@ -1,0 +1,79 @@
+"""
+LLM provider abstraction: makes the generator backend (Ollama local / Groq cloud)
+interchangeable.
+Adding a new provider later = write one new class implementing generate().
+"""
+
+from abc import ABC, abstractmethod
+import os
+import ollama
+import config
+
+"""Send a prompt to the backend, return its text answer."""
+class LLMProvider(ABC):
+    @abstractmethod
+    def generate(self, prompt: str, images: list[str] = None) -> str:
+        raise NotImplementedError
+
+
+class OllamaProvider(LLMProvider):
+    """Local, private inference via Ollama. Supports text + images (vision-capable models)."""
+
+    def __init__(self, model: str = None):
+        self.model = model or config.GENERATOR_MODEL
+
+    def generate(self, prompt: str, images: list[str] = None) -> str:
+        message = {"role": "user", "content": prompt}
+        if images:
+            message["images"] = images
+
+        response = ollama.chat(
+            model=self.model,
+            messages=[message],
+            options={"num_ctx": config.CONTEXT_WINDOW}
+        )
+        return response["message"]["content"]
+
+
+class GroqProvider(LLMProvider):
+    """
+    Fast cloud inference via Groq."""
+
+    def __init__(self, model: str = None):
+        from groq import Groq  #Ollama-only users don't need the package installed
+
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError("GROQ_API_KEY environment variable not set. Get one at console.groq.com")
+
+        self.client = Groq(api_key=api_key)
+        self.model = model or config.GROQ_MODEL
+
+    def generate(self, prompt: str, images: list[str] = None) -> str:
+        if images:
+            print("Warning: Groq backend is text-only here — attached image(s) were ignored.")
+
+        completion = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],  # no images key at all
+            temperature=1,
+            max_completion_tokens=2048,
+            top_p=1,
+            stream=False,
+            stop=None
+        )
+        return completion.choices[0].message.content
+        
+
+
+def get_llm_provider(backend: str = None) -> LLMProvider:
+    """Factory: returns the configured provider. backend overrides config.LLM_BACKEND if given."""
+    backend = (backend or config.LLM_BACKEND).lower()
+    print(f"[DEBUG] Using LLM backend: {backend}")   # temporary — confirms routing
+
+    if backend == "ollama":
+        return OllamaProvider()
+    elif backend == "groq":
+        return GroqProvider()
+    else:
+        raise ValueError(f"Unknown LLM backend: {backend}. Use 'ollama' or 'groq'.")
