@@ -128,13 +128,21 @@ def get_picture_image(doc, picture, source_path: str, ext: str):
         return crop_figure(source_path, picture.prov[0].page_no, picture.prov[0].bbox)
     return None  # couldn't extract — will be skipped with a warning
 
-def process_docling_document(file_path: str) -> list[dict]:
+def process_document(file_path: str, figures_dir: str = None) -> list[dict]:
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext in SUPPORTED_EXTENSIONS:
+        return process_docling_document(file_path, figures_dir)
+    raise ValueError(f"Unsupported file type: {ext}")
+
+
+def process_docling_document(file_path: str, figures_dir: str = None) -> list[dict]:   
     """
     Parse one file and return a list of 'blocks' — a unified representation where
     text, tables, and diagrams all end up as plain text content, tagged by type.
     Every block also carries the source filename, used later to avoid re-ingesting
     a file that's already in the database.
     """
+    figures_dir = figures_dir or config.FIGURES_DIR  # falls back to shared default if not given
     filename = os.path.basename(file_path)
     ext = os.path.splitext(file_path)[1].lower()
     print(f"\n--- Processing {filename} ---")
@@ -143,7 +151,6 @@ def process_docling_document(file_path: str) -> list[dict]:
     converter = DocumentConverter()
     doc = converter.convert(file_path).document
     blocks = []
-
     # --- Plain text blocks ---
     for item in doc.texts:
         blocks.append({
@@ -153,7 +160,7 @@ def process_docling_document(file_path: str) -> list[dict]:
 
     # --- Tables: dual storage (sentences for embedding, JSON for precise answers) ---
     for table in doc.tables:
-        records = table.export_to_dataframe().to_dict(orient="records")
+        records = table.export_to_dataframe(doc).to_dict(orient="records")
         sentence_version = " ".join(row_to_sentence(row) for row in records)
 
         blocks.append({
@@ -182,7 +189,7 @@ def process_docling_document(file_path: str) -> list[dict]:
         page_no = get_page_no(picture)
         print(f"  Captioning diagram (page {page_no}, size {image.size})...")
 
-        image_path = os.path.join(config.FIGURES_DIR, f"{filename}_page{page_no}_fig{i}.png")
+        image_path = os.path.join(figures_dir, f"{filename}_page{page_no}_fig{i}.png")
         image.save(image_path)
 
         context = get_surrounding_text(doc, page_no)
@@ -202,9 +209,10 @@ def process_docling_document(file_path: str) -> list[dict]:
 
 
 
-def embed_and_store(blocks: list[dict], embed_model, client) -> None:
+def embed_and_store(blocks: list[dict], embed_model, client, collection_name: str = None) -> None:
     """Embed every block's content and store it in ChromaDB with its metadata."""
-    collection = client.get_or_create_collection(config.COLLECTION_NAME)
+    collection_name = collection_name or config.COLLECTION_NAME
+    collection = client.get_or_create_collection(collection_name)
 
     for i, block in enumerate(blocks):
         embedding = embed_model.encode(block["content"]).tolist()

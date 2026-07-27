@@ -37,4 +37,14 @@ DOCX_MAX_ASPECT_RATIO = 1.7
 
 # LLM BACKEND
 LLM_BACKEND = "ollama"   # "ollama" (local/private) or "groq" (cloud/fast)
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "openai/gpt-oss-120b"        # text-only questions
+GROQ_VISION_MODEL = "qwen/qwen3.6-27b"     # image-attached questions — separate multimodal model
+#add path helper for each user
+def get_user_data_dir(user_id: str) -> str:
+    return os.path.join(DATA_DIR, user_id)
+
+def get_user_figures_dir(user_id: str) -> str:
+    return os.path.join(FIGURES_DIR, user_id)
+
+def get_user_collection_name(user_id: str) -> str:
+    return f"{COLLECTION_NAME}_{user_id}"

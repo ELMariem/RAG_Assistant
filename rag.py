@@ -44,11 +44,10 @@ def retrieve_chunks(query: str, collection, embed_model, top_k: int = None) -> l
     return chunks
 
 
-def build_prompt(query: str, chunks: list[dict]) -> tuple[str, list[str]]:
+def build_prompt(query: str, chunks: list[dict], history_text: str = "") -> tuple[str, list[str]]:
     """
-    Assemble the text context from all retrieved chunks, and collect base64 images
-    for any chunk that is a diagram (so the model can look at it directly, not just
-    rely on its stored description).
+    Assemble the full prompt: conversation history (if any) + retrieved context + question.
+    Also collects base64 images for any chunk that is a diagram.
     """
     text_context = ""
     images_b64 = []
@@ -61,13 +60,17 @@ def build_prompt(query: str, chunks: list[dict]) -> tuple[str, list[str]]:
         if meta["type"] == "diagram" and meta.get("image_path"):
             images_b64.append(encode_image_base64(meta["image_path"]))
 
-    prompt = f"""Based on the following context, answer the question clearly.
+    history_section = f"CONVERSATION SO FAR:\n{history_text}\n\n" if history_text else ""
+    prompt = f"""{history_section}Based on the following context, answer the question clearly.
 
 CONTEXT:
 {text_context}
 
 QUESTION: {query}
 
+If the question refers back to something discussed earlier in the conversation
+(like "it", "that model", "the same dataset"), use the conversation history above
+to understand what's being referred to.
 If an image is provided alongside the text, look at it directly to verify or add precision —
 don't rely only on the text description of it. If the context is insufficient, say so.
 
@@ -76,18 +79,39 @@ ANSWER:"""
     return prompt, images_b64
 
 
-def generate_answer(query: str, chunks: list[dict], backend: str = None) -> str:
-    """Retrieve-then-generate: build the prompt and call the configured LLM backend."""
+def generate_answer(query: str, chunks: list[dict], backend: str = None, memory=None) -> str:
+    """Retrieve-then-generate: build the prompt (with history) and call the configured LLM backend."""
 
     backend = (backend or config.LLM_BACKEND).lower()
+    has_images = any(
+        c["metadata"].get("type") == "diagram" and c["metadata"].get("image_path")
+        for c in chunks
+    )
+
+    # Groq: drop real images, rely on the stored description only — avoids the
+    # tight vision-model rate limit entirely, and keeps history short.
+    if backend == "groq":
+        history_text = memory.get_history_text(max_turns=3) if memory else ""
+        images_to_send = None  # never attach real images on Groq
+    else:
+        history_text = memory.get_history_text() if memory else ""
+        images_to_send = None  # placeholder, set below for ollama
 
     if backend == "ollama":
+        history_tokens = len(history_text) // 4
         original_count = len(chunks)
-        chunks = fit_chunks_to_context(chunks, config.CONTEXT_WINDOW)
+        chunks = fit_chunks_to_context(chunks, config.CONTEXT_WINDOW, reserved_for_answer=1200 + history_tokens)
         if len(chunks) < original_count:
             print(f"(Trimmed context: using {len(chunks)}/{original_count} retrieved chunks to fit Ollama's context window)")
 
-    prompt, images_b64 = build_prompt(query, chunks)
+    prompt, images_b64 = build_prompt(query, chunks, history_text)
+    if backend == "groq":
+        images_b64 = []  # strip images regardless of what build_prompt collected
 
     provider = llm_providers.get_llm_provider(backend)
-    return provider.generate(prompt, images=images_b64)
+    answer = provider.generate(prompt, images=images_b64)
+
+    if memory is not None:
+        memory.add_turn(query, answer)
+
+    return answer
