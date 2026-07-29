@@ -99,7 +99,7 @@ def get_recent_messages(conversation_id: int, limit: int = None) -> list[dict]:
 
 
 def list_conversations(user_id: str) -> list[dict]:
-    """List past conversations for a user — used to offer 'resume last session' at startup."""
+    #List past conversations for a user
     init_db()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -113,9 +113,7 @@ def list_conversations(user_id: str) -> list[dict]:
 
 
 class ConversationMemory:
-    """
-    public interface backed by SQLite — history survives app restarts.
-    """
+    #public interface backed by SQLite history survives app restarts.
 
     def __init__(self, user_id: str = "default_user", conversation_id: int = None,  max_turns: int = None):
         init_db()
@@ -137,5 +135,5 @@ class ConversationMemory:
         return "\n".join(lines)
 
     def clear(self) -> None:
-        """Start a brand-new conversation. Old ones stay in the database, not deleted."""
+        #Start a brand-new conversation. Old ones stay in the database, not deleted.
         self.conversation_id = create_conversation(self.user_id)

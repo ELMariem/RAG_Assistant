@@ -31,7 +31,7 @@ def fit_chunks_to_context(chunks: list[dict], max_context_tokens: int, reserved_
     return kept
 
 def retrieve_chunks(query: str, collection, embed_model, top_k: int = None) -> list[dict]:
-    """Embed the query and pull back the most similar chunks from ChromaDB."""
+    #Embed the query and pull back the most similar chunks from ChromaDB.
     top_k = top_k or config.TOP_K
     query_embedding = embed_model.encode(query).tolist()
 
@@ -44,10 +44,8 @@ def retrieve_chunks(query: str, collection, embed_model, top_k: int = None) -> l
 
 
 def build_prompt(query: str, chunks: list[dict], history_text: str = "") -> tuple[str, list[str]]:
-    """
-    Assemble the full prompt: conversation history (if any) + retrieved context + question.
-    Also collects base64 images for any chunk that is a diagram.
-    """
+    #Assemble the full prompt: conversation history (if any) + retrieved context + question.
+
     text_context = ""
     images_b64 = []
 
@@ -79,7 +77,7 @@ ANSWER:"""
 
 
 def generate_answer(query: str, chunks: list[dict], backend: str = None, memory=None) -> str:
-    """Retrieve-then-generate: build the prompt (with history) and call the configured LLM backend."""
+    #Retrieve-then-generate: build the prompt (with history) and call the configured LLM backend.
 
     backend = (backend or config.LLM_BACKEND).lower()
     has_images = any(
