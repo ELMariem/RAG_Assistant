@@ -1,7 +1,6 @@
 """
 RAG chain: given a user question, retrieve relevant chunks from ChromaDB,
-then ask the generator model to answer using that context (and any attached images).
-"""
+then ask the generator model to answer using that context (and any attached images)."""
 
 import base64
 import config

@@ -1,8 +1,4 @@
-"""
-Entry point: ingests any new PDFs found in data/documents (skipping ones already
-processed), then runs an interactive question loop.
-Memory will be added here once memory.py is built.
-"""
+#Entry point: ingests any new PDFs found in data/documents, then runs an interactive question loop.
 
 import os
 import time
@@ -16,17 +12,13 @@ import memory as memory_module
 
 
 def get_already_ingested_files(collection) -> set:
-    """Look at what's already stored in ChromaDB and return the set of source filenames."""
     existing = collection.get(include=["metadatas"])
     return {meta["source_file"] for meta in existing["metadatas"] if meta.get("source_file")}
 
 
 def sync_collection(embed_model, client, user_id: str):
-    """
-    Make sure every PDF currently in data/documents is represented in ChromaDB.
-    Already-ingested files are skipped; new files are processed and added.
-    This is what lets you drop in a new PDF later without wiping the database.
-    """
+    #Make sure every PDF currently in data/documents is represented in ChromaDB.
+    
     data_dir = config.get_user_data_dir(user_id)
     figures_dir = config.get_user_figures_dir(user_id)
     collection_name = config.get_user_collection_name(user_id)
@@ -94,7 +86,7 @@ def main():
             print("Conversation history cleared.\n")
             continue
         if query.lower().startswith("add "):
-            source_path = query[4:].strip().strip('"')  # pasting a path with quotes
+            source_path = query[4:].strip().strip('"')
             if not os.path.isfile(source_path):
                 print(f"File not found: {source_path}\n")
                 continue

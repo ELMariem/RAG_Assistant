@@ -1,8 +1,5 @@
-# conversation buffer
-"""
-Long-term conversation memory: stores every user/assistant turn in a local
-SQLite database (memory.db).
-"""
+# conversation buffer: Long-term conversation memory.
+
 import sqlite3
 import os
 from datetime import datetime

@@ -1,23 +1,18 @@
-"""
-LLM provider abstraction: makes the generator backend (Ollama local / Groq cloud)
-interchangeable.
-Adding a new provider later = write one new class implementing generate().
-"""
+#LLM provider abstraction: makes the generator backend (Ollama local / Groq cloud) interchangeable.
 
 from abc import ABC, abstractmethod
 import os
 import ollama
 import config
 
-"""Send a prompt to the backend, return its text answer."""
+#Send a prompt to the backend, return its text answer.
 class LLMProvider(ABC):
     @abstractmethod
     def generate(self, prompt: str, images: list[str] = None) -> str:
         raise NotImplementedError
 
-
+#Local, private inference via Ollama.
 class OllamaProvider(LLMProvider):
-    """Local, private inference via Ollama. Supports text + images (vision-capable models)."""
 
     def __init__(self, model: str = None):
         self.model = model or config.GENERATOR_MODEL
@@ -34,10 +29,8 @@ class OllamaProvider(LLMProvider):
         )
         return response["message"]["content"]
 
-
+#Fast cloud inference via Groq.
 class GroqProvider(LLMProvider):
-    """
-    Fast cloud inference via Groq."""
 
     def __init__(self, model: str = None, vision_model: str = None):
         from groq import Groq  #Ollama-only users don't need the package installed
@@ -89,7 +82,7 @@ class GroqProvider(LLMProvider):
 
 
 def get_llm_provider(backend: str = None) -> LLMProvider:
-    """Factory: returns the configured provider. backend overrides config.LLM_BACKEND if given."""
+
     backend = (backend or config.LLM_BACKEND).lower()
     print(f"[DEBUG] Using LLM backend: {backend}")   # temporary — confirms routing
 
