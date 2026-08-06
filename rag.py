@@ -5,6 +5,9 @@ then ask the generator model to answer using that context (and any attached imag
 import base64
 import config
 import llm_providers
+import logging
+
+logger = logging.getLogger(__name__)
 
 def encode_image_base64(path: str) -> str:
     """Read an image file from disk and encode it as base64."""
@@ -43,7 +46,7 @@ def retrieve_chunks(query: str, collection, embed_model, top_k: int = None) -> l
     return chunks
 
 
-def build_prompt(query: str, chunks: list[dict], history_text: str = "") -> tuple[str, list[str]]:
+def build_prompt(query: str, chunks: list[dict], history_text: str = "", include_images: bool = True) -> tuple[str, list[str]]:
     #Assemble the full prompt: conversation history (if any) + retrieved context + question.
 
     text_context = ""
@@ -54,12 +57,11 @@ def build_prompt(query: str, chunks: list[dict], history_text: str = "") -> tupl
         text_context += f"--- Source ({meta['source_file']}, page {meta['page']}, type: {meta['type']}) ---\n"
         text_context += f"{chunk['content']}\n\n"
 
-        if meta["type"] == "diagram" and meta.get("image_path"):
+        if include_images and meta["type"] == "diagram" and meta.get("image_path"):
             images_b64.append(encode_image_base64(meta["image_path"]))
 
     history_section = f"CONVERSATION SO FAR:\n{history_text}\n\n" if history_text else ""
     prompt = f"""{history_section}Based on the following context, answer the question clearly.
-
 CONTEXT:
 {text_context}
 
@@ -80,35 +82,64 @@ def generate_answer(query: str, chunks: list[dict], backend: str = None, memory=
     #Retrieve-then-generate: build the prompt (with history) and call the configured LLM backend.
 
     backend = (backend or config.LLM_BACKEND).lower()
-    has_images = any(
-        c["metadata"].get("type") == "diagram" and c["metadata"].get("image_path")
-        for c in chunks
-    )
 
-    # Groq: drop real images, rely on the stored description only — avoids the
-    # tight vision-model rate limit entirely, and keeps history short.
     if backend == "groq":
         history_text = memory.get_history_text(max_turns=3) if memory else ""
-        images_to_send = None  # never attach real images on Groq
+        include_images = False  # Groq: rely on stored description only
     else:
         history_text = memory.get_history_text() if memory else ""
-        images_to_send = None  # placeholder, set below for ollama
+        include_images = True
+        
+    if backend == "ollama":
+        history_tokens = len(history_text) // 4
+        original_count = len(chunks)
+        chunks = fit_chunks_to_context(chunks, config.CONTEXT_WINDOW, reserved_for_answer=1200 + history_tokens)
+        if len(chunks) < original_count:
+            logger.info(f"(Trimmed context: using {len(chunks)}/{original_count} retrieved chunks to fit Ollama's context window)")
+
+    prompt, images_b64 = build_prompt(query, chunks, history_text, include_images=include_images)
+
+    try:
+        provider = llm_providers.get_llm_provider(backend)
+        answer = provider.generate(prompt, images=images_b64 if images_b64 else None)
+    except Exception as e:
+        logger.error(f"LLM generation failed: {e}")
+        return f"Sorry, I encountered an error while generating the answer: {e}"
+
+    if memory is not None:
+        memory.add_turn(query, answer)
+
+    return answer
+def generate_answer_stream(query: str, chunks: list[dict], backend: str = None, memory=None):
+    #Streaming responses: send each token to the browser as soon as it's generated.
+    backend = (backend or config.LLM_BACKEND).lower()
+    if backend == "groq":
+        history_text = memory.get_history_text(max_turns=3) if memory else ""
+        include_images = False
+    else:
+        history_text = memory.get_history_text() if memory else ""
+        include_images = True
 
     if backend == "ollama":
         history_tokens = len(history_text) // 4
         original_count = len(chunks)
         chunks = fit_chunks_to_context(chunks, config.CONTEXT_WINDOW, reserved_for_answer=1200 + history_tokens)
         if len(chunks) < original_count:
-            print(f"(Trimmed context: using {len(chunks)}/{original_count} retrieved chunks to fit Ollama's context window)")
+            logger.info(f"Trimmed context: {len(chunks)}/{original_count}")
 
-    prompt, images_b64 = build_prompt(query, chunks, history_text)
-    if backend == "groq":
-        images_b64 = []  # strip images regardless of what build_prompt collected
-
+    prompt, images_b64 = build_prompt(query, chunks, history_text, include_images=include_images)
     provider = llm_providers.get_llm_provider(backend)
-    answer = provider.generate(prompt, images=images_b64)
+
+    full_answer = ""
+    try:
+        for token in provider.generate_stream(prompt, images=images_b64 if images_b64 else None):
+            full_answer += token
+            yield token
+    except Exception as e:
+        logger.error(f"Streaming generation failed: {e}")
+        error_msg = f"\n[Error during generation: {e}]"
+        full_answer += error_msg
+        yield error_msg
 
     if memory is not None:
-        memory.add_turn(query, answer)
-
-    return answer
+        memory.add_turn(query, full_answer)

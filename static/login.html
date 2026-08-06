@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - RAG Assistant</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-box {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 16px;
+            width: 360px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h2 { margin-bottom: 1.5rem; color: #1a1a2e; text-align: center; }
+        input {
+            width: 100%;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background: #1a1a2e;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-bottom: 0.5rem;
+        }
+        button.secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        .status {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            text-align: center;
+            display: none;
+        }
+        .status.error { background: #fee; color: #c00; display: block; }
+        .status.success { background: #efe; color: #080; display: block; }
+        .debug {
+            margin-top: 1rem;
+            font-size: 0.75rem;
+            color: #666;
+            background: #f5f5f5;
+            padding: 0.5rem;
+            border-radius: 4px;
+            word-break: break-all;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h2>🧠 RAG Assistant</h2>
+        <input type="text" id="username" placeholder="Username" value="elabed">
+        <input type="password" id="password" placeholder="Password" value="testpass123">
+        <button onclick="login()">Login</button>
+        <button class="secondary" onclick="register()">Create Account</button>
+        <div class="status" id="status"></div>
+        <div class="debug" id="debug"></div>
+    </div>
+
+    <script>
+        function showStatus(msg, isError = false) {
+            const el = document.getElementById('status');
+            el.textContent = msg;
+            el.className = 'status ' + (isError ? 'error' : 'success');
+        }
+
+        function showDebug(msg) {
+            const el = document.getElementById('debug');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        async function login() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) {
+                showStatus('Please enter username and password', true);
+                return;
+            }
+
+            showStatus('Logging in...');
+            
+            try {
+                const res = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: username, password: password })
+                });
+                
+                const data = await res.json();
+                console.log("FULL LOGIN RESPONSE:", data);
+                showDebug("Response: " + JSON.stringify(data).substring(0, 200));
+                
+                if (!res.ok) {
+                    showStatus(data.detail || 'Login failed', true);
+                    return;
+                }
+                
+                // ── CRITICAL: Handle different response shapes ──
+                let token = null;
+                
+                if (data.access_token && typeof data.access_token === 'string') {
+                    token = data.access_token;
+                    console.log("✅ Found token in data.access_token");
+                } else if (data.token && typeof data.token === 'string') {
+                    token = data.token;
+                    console.log("✅ Found token in data.token");
+                } else if (typeof data === 'string') {
+                    token = data;
+                    console.log("✅ Response is raw string token");
+                } else {
+                    console.error("❌ No token found in response. Keys:", Object.keys(data));
+                    showStatus('Server did not return a token. Check console.', true);
+                    return;
+                }
+                
+                // Validate it looks like a JWT (has 2 dots)
+                if (token.split('.').length !== 3) {
+                    console.error("❌ Stored value is not a valid JWT:", token);
+                    showStatus('Received invalid token from server', true);
+                    return;
+                }
+                
+                localStorage.setItem('token', token);
+                localStorage.setItem('user_id', username);
+                console.log("✅ Token stored. Length:", token.length);
+                
+                showStatus('Success! Redirecting...');
+                setTimeout(() => {
+                    window.location.href = `/static/index.html?user=${encodeURIComponent(username)}`;
+                }, 500);
+                
+            } catch (e) {
+                console.error("Login error:", e);
+                showStatus('Network error: ' + e.message, true);
+            }
+        }
+
+        async function register() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) {
+                showStatus('Please enter username and password', true);
+                return;
+            }
+
+            showStatus('Creating account...');
+            
+            try {
+                const res = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: username, password: password })
+                });
+                
+                const data = await res.json();
+                console.log("Register response:", data);
+                
+                if (res.ok) {
+                    showStatus('Account created! You can now log in.');
+                } else {
+                    showStatus(data.detail || 'Registration failed', true);
+                }
+            } catch (e) {
+                showStatus('Network error: ' + e.message, true);
+            }
+        }
+    </script>
+</body>
+</html>

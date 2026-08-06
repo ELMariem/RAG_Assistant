@@ -10,7 +10,7 @@ DATA_DIR = os.path.join(BASE_DIR, "data", "documents")   # where your source PDF
 FIGURES_DIR = os.path.join(BASE_DIR, "data", "figures")  # cropped diagram images get saved here
 CHROMA_DIR = os.path.join(BASE_DIR, "chroma_db")         # ChromaDB's persistent storage folder
 
-COLLECTION_NAME = "Alzeheimer"  # name of the ChromaDB collection (change this to switch datasets)
+COLLECTION_NAME = "dataset"  # name of the ChromaDB collection
 CONTEXT_WINDOW = 8192
 # Generator: answers the user's question using retrieved text + images
 GENERATOR_MODEL = "qwen2.5vl:7b"
@@ -39,6 +39,14 @@ DOCX_MAX_ASPECT_RATIO = 1.7
 LLM_BACKEND = "ollama"   # "ollama" (local/private) or "groq" (cloud/fast)
 GROQ_MODEL = "openai/gpt-oss-120b"        # text-only questions
 GROQ_VISION_MODEL = "qwen/qwen3.6-27b"     # image-attached questions — separate multimodal model
+
+JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "dev-secret-change-me-in-production")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRE_DAYS = 7
+#database configuration
+DB_TYPE = os.getenv("DB_TYPE", "sqlite")  # "sqlite" or "sqlserver"
+DB_PATH = os.path.join(BASE_DIR, "memory.db")
+
 #add path helper for each user
 def get_user_data_dir(user_id: str) -> str:
     return os.path.join(DATA_DIR, user_id)

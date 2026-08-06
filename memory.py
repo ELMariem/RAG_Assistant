@@ -1,123 +1,165 @@
-# conversation buffer: Long-term conversation memory.
-
-import sqlite3
 import os
 from datetime import datetime
+from sqlalchemy import create_engine, text
 import config
 
-DB_PATH = os.path.join(config.BASE_DIR, "memory.db")
+DB_URL = os.environ.get("SQL_SERVER_CONNECTION_STRING")
 
+if not DB_URL:
+    raise ValueError(
+        "SQL_SERVER_CONNECTION_STRING environment variable not set.\n"
+        "Example: mssql+pyodbc://sa:password@localhost/AlzheimerRAG?driver=ODBC+Driver+17+for+SQL+Server"
+    )
+engine = create_engine(
+    DB_URL,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    future=True  # SQLAlchemy 2.0 style
+)
 
 def init_db() -> None:
-    """Create the tables if they don't exist yet. Safe to call every startup."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            user_id TEXT PRIMARY KEY,
-            name TEXT
+    #Verify that SQL Server is reachable
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_NAME IN ('users', 'conversations', 'messages')
+        """))
+        table_count = result.scalar()
+        
+    if table_count < 3:
+        raise RuntimeError(
+            f"SQL Server is connected, but only {table_count}/3 required tables were found. "
+            "Please run the CREATE TABLE script in SSMS before starting the app."
         )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS conversations (
-            conversation_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(user_id)
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            message_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            conversation_id INTEGER NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            timestamp TEXT NOT NULL,
-            FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id)
-        )
-    """)
-    conn.commit()
-    conn.close()
 
 
 def get_or_create_user(user_id: str) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO users (user_id, name) VALUES (?, ?)", (user_id, user_id))
-    conn.commit()
-    conn.close()
-
+#Insert user only if they don't already exist.
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                IF NOT EXISTS (SELECT 1 FROM users WHERE user_id = :user_id)
+                    INSERT INTO users (user_id, name) VALUES (:user_id, :name)
+            """),
+            {"user_id": user_id, "name": user_id}
+        )
 
 def create_conversation(user_id: str) -> int:
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO conversations (user_id, started_at) VALUES (?, ?)",
-        (user_id, datetime.now().isoformat())
-    )
-    conversation_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-    return conversation_id
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("""
+                INSERT INTO conversations (user_id, started_at)
+                OUTPUT INSERTED.conversation_id
+                VALUES (:user_id, :started_at)
+            """),
+            {"user_id": user_id, "started_at": datetime.now()}
+        )
+        return result.scalar()
 
 
 def get_latest_conversation_id(user_id: str):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT conversation_id FROM conversations WHERE user_id = ? ORDER BY started_at DESC LIMIT 1",
-        (user_id,)
-    )
-    row = cursor.fetchone()
-    conn.close()
-    return row[0] if row else None
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("""
+                SELECT TOP 1 conversation_id 
+                FROM conversations
+                WHERE user_id = :user_id
+                ORDER BY started_at DESC
+            """),
+            {"user_id": user_id}
+        )
+        row = result.fetchone()
+        return row[0] if row else None
 
 
 def add_message(conversation_id: int, role: str, content: str) -> None:
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO messages (conversation_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
-        (conversation_id, role, content, datetime.now().isoformat())
-    )
-    conn.commit()
-    conn.close()
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO messages (conversation_id, role, content, timestamp)
+                VALUES (:conversation_id, :role, :content, :timestamp)
+            """),
+            {
+                "conversation_id": conversation_id,
+                "role": role,
+                "content": content,
+                "timestamp": datetime.now()
+            }
+        )
 
 
 def get_recent_messages(conversation_id: int, limit: int = None) -> list[dict]:
-    limit = limit or config.MAX_HISTORY_TURNS * 2  # *2: each turn = 1 user + 1 assistant message
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY message_id DESC LIMIT ?",
-        (conversation_id, limit)
-    )
-    rows = cursor.fetchall()
-    conn.close()
-    rows.reverse()  # back to chronological order (oldest first)
-    return [{"role": r[0], "content": r[1]} for r in rows]
+    """
+    Fetch the N most recent messages and return them in chronological order
+    (oldest first, newest last) so the LLM prompt reads naturally.
+    """
+    limit = limit or (config.MAX_HISTORY_TURNS * 2)
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("""
+                SELECT role, content FROM (
+                    SELECT TOP (:limit) role, content, message_id
+                    FROM messages
+                    WHERE conversation_id = :conversation_id
+                    ORDER BY message_id DESC
+                ) AS recent
+                ORDER BY message_id ASC
+            """),
+            {"conversation_id": conversation_id, "limit": limit}
+        )
+        rows = result.fetchall()
+        return [{"role": r[0], "content": r[1]} for r in rows]
 
 
 def list_conversations(user_id: str) -> list[dict]:
-    #List past conversations for a user
-    init_db()
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT conversation_id, started_at FROM conversations WHERE user_id = ? ORDER BY started_at DESC",
-        (user_id,)
-    )
-    rows = cursor.fetchall()
-    conn.close()
-    return [{"conversation_id": r[0], "started_at": r[1]} for r in rows]
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("""
+                SELECT conversation_id, started_at
+                FROM conversations
+                WHERE user_id = :user_id
+                ORDER BY started_at DESC
+            """),
+            {"user_id": user_id}
+        )
+        rows = result.fetchall()
+        return [{"conversation_id": r[0], "started_at": r[1]} for r in rows]
 
+
+def get_conversation_preview(conversation_id: int) -> str:
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("""
+                SELECT TOP 1 content
+                FROM messages
+                WHERE conversation_id = :conversation_id AND role = 'user'
+                ORDER BY message_id ASC
+            """),
+            {"conversation_id": conversation_id}
+        )
+        row = result.fetchone()
+        return row[0] if row else "New conversation"
+
+
+def get_all_messages(conversation_id: int) -> list[dict]:
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("""
+                SELECT role, content
+                FROM messages
+                WHERE conversation_id = :conversation_id
+                ORDER BY message_id ASC
+            """),
+            {"conversation_id": conversation_id}
+        )
+        rows = result.fetchall()
+        return [{"role": r[0], "content": r[1]} for r in rows]
 
 class ConversationMemory:
-    #public interface backed by SQLite history survives app restarts.
-
-    def __init__(self, user_id: str = "default_user", conversation_id: int = None,  max_turns: int = None):
-        init_db()
-        get_or_create_user(user_id)
+    
+    def __init__(self, user_id: str = "default_user", conversation_id: int = None, max_turns: int = None):
+        init_db()                       # Verify DB is ready
+        get_or_create_user(user_id)      # Ensure user row exists
         self.user_id = user_id
         self.conversation_id = conversation_id or create_conversation(user_id)
         self.max_turns = max_turns or config.MAX_HISTORY_TURNS
@@ -135,5 +177,5 @@ class ConversationMemory:
         return "\n".join(lines)
 
     def clear(self) -> None:
-        #Start a brand-new conversation. Old ones stay in the database, not deleted.
+        """Start a brand-new conversation. Old ones stay in the database."""
         self.conversation_id = create_conversation(self.user_id)

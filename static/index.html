@@ -5,293 +5,564 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RAG Assistant</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #f8fafc; color: #1e293b; height: 100vh; overflow: hidden; }
-        
-        #app { display: flex; height: 100vh; }
-        
-        /* Sidebar */
-        aside { width: 260px; background: #fff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; }
-        .sidebar-header { padding: 16px; border-bottom: 1px solid #e2e8f0; }
-        .sidebar-header h2 { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-        .logo-icon { width: 28px; height: 28px; background: #2563eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; }
-        .sidebar-content { padding: 16px; flex: 1; overflow-y: auto; }
-        .field { margin-bottom: 20px; }
-        .field label { display: block; font-size: 0.75rem; font-weight: 600; color: #64748b; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
-        .field input, .field select { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.9rem; background: #f8fafc; outline: none; transition: border 0.2s; }
-        .field input:focus, .field select:focus { border-color: #2563eb; }
-        .dropzone { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 16px; text-align: center; background: #f8fafc; cursor: pointer; transition: all 0.2s; }
-        .dropzone:hover, .dropzone.dragover { border-color: #2563eb; background: #eff6ff; }
-        .dropzone svg { margin: 0 auto 8px; }
-        .dropzone p { font-size: 0.8rem; color: #64748b; }
-        #uploadStatus { margin-top: 8px; font-size: 0.8rem; }
-        .new-chat-btn { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #334155; font-size: 0.85rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s; }
-        .new-chat-btn:hover { background: #f1f5f9; }
-        
-        /* Main Chat */
-        main { flex: 1; display: flex; flex-direction: column; position: relative; }
-        #messages { flex: 1; overflow-y: auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth; }
-        #messages::-webkit-scrollbar { width: 6px; }
-        #messages::-webkit-scrollbar-track { background: transparent; }
-        #messages::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-        
-        .welcome { text-align: center; padding: 40px 20px; max-width: 600px; margin: 0 auto; }
-        .welcome-icon { width: 48px; height: 48px; background: linear-gradient(135deg, #2563eb, #7c3aed); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: #fff; font-size: 20px; font-weight: 600; }
-        .welcome h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 8px; }
-        .welcome p { color: #64748b; font-size: 0.95rem; }
-        
-        .message-row { display: flex; gap: 12px; max-width: 768px; margin: 0 auto; width: 100%; }
-        .message-row.user { flex-direction: row-reverse; }
-        .avatar { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #fff; }
-        .avatar.user { background: #2563eb; }
-        .avatar.assistant { background: linear-gradient(135deg, #2563eb, #7c3aed); }
-        .bubble { padding: 12px 16px; border-radius: 16px; font-size: 0.95rem; line-height: 1.6; max-width: calc(100% - 48px); word-wrap: break-word; }
-        .bubble.user { background: #2563eb; color: #fff; border-bottom-right-radius: 4px; }
-        .bubble.assistant { background: #f1f5f9; color: #1e293b; border-bottom-left-radius: 4px; }
-        .bubble pre { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; margin: 8px 0; }
-        .bubble code { background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.9em; }
-        .bubble.user code { background: rgba(255,255,255,0.2); }
-        
-        .typing { display: flex; gap: 4px; align-items: center; padding: 16px; background: #f1f5f9; border-radius: 16px; border-bottom-left-radius: 4px; }
-        .typing span { width: 6px; height: 6px; background: #94a3b8; border-radius: 50%; animation: typingBounce 1.4s infinite ease-in-out both; }
-        .typing span:nth-child(2) { animation-delay: 0.2s; }
-        .typing span:nth-child(3) { animation-delay: 0.4s; }
-        
-        @keyframes typingBounce {
-            0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-            40% { transform: scale(1); opacity: 1; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
+        header {
+            background: #1a1a2e;
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        header h1 { font-size: 1.25rem; font-weight: 600; }
+        .container {
+            flex: 1;
+            display: flex;
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 1rem;
+            gap: 1rem;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 300px;
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+        .sidebar label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #555;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+        .sidebar input, .sidebar select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        .sidebar button {
+            width: 100%;
+            padding: 0.6rem;
+            border: none;
+            border-radius: 6px;
+            background: #1a1a2e;
+            color: white;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: opacity 0.2s;
+        }
+        .sidebar button:hover { opacity: 0.9; }
+        .sidebar button.secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        .sidebar button.danger {
+            background: #c00;
+            color: white;
+        }
+        .chat-area {
+            flex: 1;
+            background: white;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .message {
+            max-width: 80%;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            line-height: 1.5;
+            font-size: 0.95rem;
+            word-wrap: break-word;
+        }
+        .message.user {
+            align-self: flex-end;
+            background: #1a1a2e;
+            color: white;
+        }
+        .message.assistant {
+            align-self: flex-start;
+            background: #f0f0f0;
+            color: #333;
+        }
+        .message .meta {
+            font-size: 0.75rem;
+            opacity: 0.7;
+            margin-bottom: 0.25rem;
+        }
+        .input-area {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 0.5rem;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        .input-area button {
+            padding: 0.75rem 1.5rem;
+            background: #1a1a2e;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .input-area button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .upload-area {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            font-size: 0.85rem;
+            color: #666;
+        }
+        .upload-area:hover { border-color: #1a1a2e; }
+        .upload-area input { display: none; }
+        .status {
+            font-size: 0.8rem;
+            color: #666;
+            text-align: center;
+        }
+        .error { color: #c00; }
+        .success { color: #080; }
         
-        /* Input Area */
-        .input-area { border-top: 1px solid #e2e8f0; padding: 16px 16px 24px; background: #fff; }
-        .input-wrapper { max-width: 768px; margin: 0 auto; position: relative; }
-        .input-box { display: flex; align-items: flex-end; gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 8px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: all 0.2s; }
-        .input-box:focus-within { box-shadow: 0 4px 12px rgba(37,99,235,0.1); border-color: #2563eb; }
-        .input-box textarea { flex: 1; border: none; outline: none; background: transparent; resize: none; max-height: 120px; padding: 8px; font-size: 0.95rem; line-height: 1.5; color: #1e293b; font-family: inherit; }
-        .send-btn { width: 32px; height: 32px; border-radius: 8px; background: #2563eb; color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
-        .send-btn:hover { background: #1d4ed8; }
-        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .disclaimer { text-align: center; margin-top: 8px; font-size: 0.7rem; color: #94a3b8; }
+        /* Document list styling */
+        .doc-list {
+            max-height: 160px;
+            overflow-y: auto;
+            font-size: 0.8rem;
+            border: 1px solid #eee;
+            border-radius: 6px;
+            padding: 0.25rem;
+            background: #fafafa;
+        }
+        .doc-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.35rem 0.4rem;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .doc-item:last-child { border-bottom: none; }
+        .doc-item button {
+            width: auto;
+            padding: 0.1rem 0.3rem;
+            background: none;
+            color: #c00;
+            font-size: 1rem;
+            border: none;
+            cursor: pointer;
+        }
+        .auth-banner {
+            background: #1a1a2e;
+            color: white;
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .auth-banner button {
+            background: #333;
+            color: white;
+            border: none;
+            padding: 0.3rem 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
     </style>
 </head>
 <body>
-    <div id="app">
-        <aside>
-            <div class="sidebar-header">
-                <h2><div class="logo-icon">AI</div> RAG Assistant</h2>
+    <div class="auth-banner">
+        <span>👤 <span id="authUser">Loading...</span></span>
+        <button onclick="logout()">Logout</button>
+    </div>
+    
+    <header>
+        <h1>RAG Assistant</h1>
+    </header>
+    
+    <div class="container">
+        <aside class="sidebar">
+            <div>
+                <label>Backend</label>
+                <select id="backend">
+                    <option value="ollama">Ollama (Local)</option>
+                    <option value="groq">Groq (Cloud)</option>
+                </select>
             </div>
-            <div class="sidebar-content">
-                <div class="field">
-                    <label>User ID</label>
-                    <input id="userId" value="mariem">
-                </div>
-                <div class="field">
-                    <label>Backend</label>
-                    <select id="backend">
-                        <option value="ollama">Ollama (local)</option>
-                        <option value="groq">Groq (cloud)</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Documents</label>
-                    <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="17 8 12 3 7 8"/>
-                            <line x1="12" y1="3" x2="12" y2="15"/>
-                        </svg>
-                        <p>Drop file or click to upload</p>
-                    </div>
-                    <input type="file" id="fileInput" style="display:none;" onchange="uploadFile()">
-                    <div id="uploadStatus"></div>
-                </div>
-                <button class="new-chat-btn" onclick="clearMemory()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="5" x2="12" y2="19"/>
-                        <line x1="5" y1="12" x2="19" y2="12"/>
-                    </svg>
-                    New Chat
-                </button>
+            
+            <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                <div>📄 Click to upload PDF/DOCX</div>
+                <input type="file" id="fileInput" accept=".pdf,.docx" onchange="uploadFile()">
             </div>
+            <div class="status" id="uploadStatus"></div>
+            
+            <!-- THIS ELEMENT MUST EXIST - it was missing and caused your crash -->
+            <div>
+                <label>📚 Loaded Documents</label>
+                <div class="doc-list" id="documentsList">
+                    <div class="status" style="padding:0.5rem;">Loading...</div>
+                </div>
+            </div>
+            <button onclick="startNewConversation()">➕ New Conversation</button>
+            <button class="secondary" onclick="clearMemory()">🗑️ Clear Memory</button>
+            <button class="secondary" onclick="loadConversations()">📋 Load Conversations</button>
+            <div id="conversations" style="font-size:0.85rem;color:#666;"></div>
         </aside>
-
-        <main>
-            <div id="messages">
-                <div class="welcome">
-                    <div class="welcome-icon">AI</div>
-                    <h1>How can I help you today?</h1>
-                    <p>Ask questions about your uploaded documents.</p>
-                </div>
-            </div>
+        
+        <main class="chat-area">
+            <div class="messages" id="messages"></div>
             <div class="input-area">
-                <div class="input-wrapper">
-                    <div class="input-box">
-                        <textarea id="question" rows="1" placeholder="Ask something about your documents..." oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askQuestion();}"></textarea>
-                        <button class="send-btn" id="askButton" onclick="askQuestion()">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                <line x1="22" y1="2" x2="11" y2="13"/>
-                                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
+                <input type="text" id="question" placeholder="Ask a question..." onkeydown="if(event.key==='Enter')sendQuestion()">
+                <button onclick="sendQuestion()" id="sendBtn">Send</button>
             </div>
         </main>
     </div>
 
     <script>
-        let isLoading = false;
+        // ── AUTH GUARD ──────────────────────────────────────────────────────
+        const token = localStorage.getItem('token');
+        const userId = new URLSearchParams(window.location.search).get('user') || 'default_user';
+        
+        if (!token) {
+            window.location.href = '/static/login.html';
+        } else {
+            document.getElementById('authUser').textContent = userId;
+        }
+        
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user_id');
+            window.location.href = '/static/login.html';
+        }
 
-        const dropzone = document.getElementById('dropzone');
-        dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
-        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-        dropzone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropzone.classList.remove('dragover');
-            if (e.dataTransfer.files.length) {
-                document.getElementById('fileInput').files = e.dataTransfer.files;
-                uploadFile();
+        let currentConversationId = null;
+
+        function addMessage(role, text) {
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            div.innerHTML = `<div class="meta">${role === 'user' ? 'You' : 'Assistant'}</div>${escapeHtml(text)}`;
+            document.getElementById('messages').appendChild(div);
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function handleAuthError(response) {
+            if (response.status === 401) {
+                localStorage.removeItem('token');
+                alert('Session expired. Please log in again.');
+                window.location.href = '/static/login.html';
+                return true;
             }
-        });
-
-        function newChat() {
-            document.getElementById('messages').innerHTML = `
-                <div class="welcome">
-                    <div class="welcome-icon">AI</div>
-                    <h1>How can I help you today?</h1>
-                    <p>Ask questions about your uploaded documents.</p>
-                </div>
-            `;
-            document.getElementById('question').value = '';
-            document.getElementById('question').style.height = 'auto';
+            return false;
         }
 
-        function formatText(text) {
-            return text
-                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-                .replace(/`([^`]+)`/g, '<code>$1</code>')
-                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.+?)\*/g, '<em>$1</em>')
-                .replace(/\n/g, '<br>');
-        }
-
-        function addMessage(text, sender) {
-            const messages = document.getElementById('messages');
-            const welcome = messages.querySelector('.welcome');
-            if (welcome) welcome.remove();
-
-            const row = document.createElement('div');
-            row.className = 'message-row ' + sender;
-            row.innerHTML = `
-                <div class="avatar ${sender}">${sender === 'user' ? 'You' : 'AI'}</div>
-                <div class="bubble ${sender}">${formatText(text)}</div>
-            `;
-            messages.appendChild(row);
-            messages.scrollTop = messages.scrollHeight;
-            return row.querySelector('.bubble');
-        }
-
-        function showTyping() {
-            const messages = document.getElementById('messages');
-            const welcome = messages.querySelector('.welcome');
-            if (welcome) welcome.remove();
-
-            const row = document.createElement('div');
-            row.className = 'message-row';
-            row.id = 'typing';
-            row.innerHTML = `
-                <div class="avatar assistant">AI</div>
-                <div class="typing"><span></span><span></span><span></span></div>
-            `;
-            messages.appendChild(row);
-            messages.scrollTop = messages.scrollHeight;
-        }
-
-        function removeTyping() {
-            const typing = document.getElementById('typing');
-            if (typing) typing.remove();
-        }
-
-        async function askQuestion() {
-            if (isLoading) return;
-            const question = document.getElementById('question').value.trim();
+        async function sendQuestion() {
+            const input = document.getElementById('question');
+            const btn = document.getElementById('sendBtn');
+            const question = input.value.trim();
             if (!question) return;
 
-            addMessage(question, 'user');
-            document.getElementById('question').value = '';
-            document.getElementById('question').style.height = 'auto';
+            const backend = document.getElementById('backend').value;
+            
+            addMessage('user', question);
+            input.value = '';
+            btn.disabled = true;
 
-            isLoading = true;
-            document.getElementById('askButton').disabled = true;
-            showTyping();
-
+            const assistantDiv = document.createElement('div');
+            assistantDiv.className = 'message assistant';
+            assistantDiv.innerHTML = '<div class="meta">Assistant</div><span class="content"></span>';
+            document.getElementById('messages').appendChild(assistantDiv);
+            
             try {
-                const response = await fetch('/ask', {
+                const response = await fetch('/ask_stream', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
                     body: JSON.stringify({
-                        user_id: document.getElementById('userId').value,
+                        user_id: userId,
                         question: question,
-                        backend: document.getElementById('backend').value
+                        backend: backend,
+                        conversation_id: currentConversationId
                     })
                 });
-
-                removeTyping();
-                if (!response.ok) {
-                    const err = await response.json();
-                    addMessage('Error: ' + JSON.stringify(err), 'assistant');
+                
+                if (handleAuthError(response)) {
+                    btn.disabled = false;
                     return;
                 }
-                const data = await response.json();
-                addMessage(`[${data.backend_used}] ${data.answer}`, 'assistant');
-            } catch (err) {
-                removeTyping();
-                addMessage('Request failed: ' + err.message, 'assistant');
-            } finally {
-                isLoading = false;
-                document.getElementById('askButton').disabled = false;
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let fullAnswer = '';
+                
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, {stream: true});
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        
+                        const data = JSON.parse(line.slice(6));
+                        
+                        if (data.token) {
+                            fullAnswer += data.token;
+                            assistantDiv.querySelector('.content').textContent = fullAnswer;
+                            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+                        }
+                        
+                        if (data.done) {
+                            currentConversationId = data.conversation_id;
+                            document.getElementById('backend-badge').textContent = data.backend_used;
+                        }
+                    }
+                }
+            } catch (e) {
+                assistantDiv.querySelector('.content').textContent = 'Error: ' + e.message;
             }
+            
+            btn.disabled = false;
+            input.focus();
         }
-        async function clearMemory() {
-            const userId = document.getElementById("userId").value;
-            const statusDiv = document.getElementById("memoryStatus");
 
-            try {
-                const response = await fetch("/clear_memory", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ user_id: userId })
-                });
-                const data = await response.json();
-                statusDiv.textContent = data.message;
-            } catch (err) {
-                statusDiv.textContent = "Failed: " + err.message;
-            }
-        }
         async function uploadFile() {
             const fileInput = document.getElementById('fileInput');
             const status = document.getElementById('uploadStatus');
-            if (!fileInput.files.length) return;
+            const file = fileInput.files[0];
+            if (!file) return;
 
             const formData = new FormData();
-            formData.append('user_id', document.getElementById('userId').value);
-            formData.append('file', fileInput.files[0]);
+            formData.append('file', file);
 
-            status.textContent = 'Ingesting...';
-            status.style.color = '#2563eb';
+            status.textContent = 'Uploading...';
+            status.className = 'status';
 
             try {
-                const res = await fetch('/ingest', { method: 'POST', body: formData });
+                const res = await fetch('/ingest', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+                
+                if (handleAuthError(res)) return;
+                
                 const data = await res.json();
-                status.textContent = data.message;
-                status.style.color = '#16a34a';
-                fileInput.value = '';
-            } catch (err) {
-                status.textContent = 'Upload failed: ' + err.message;
-                status.style.color = '#dc2626';
+                if (res.ok) {
+                    status.textContent = `✅ ${data.message}`;
+                    status.className = 'status success';
+                    loadDocuments();
+                } else {
+                    status.textContent = `❌ ${data.detail || 'Upload failed'}`;
+                    status.className = 'status error';
+                }
+            } catch (e) {
+                status.textContent = `❌ ${e.message}`;
+                status.className = 'status error';
+            }
+            
+            fileInput.value = '';
+        }
+        async function startNewConversation() {
+            try {
+                const res = await fetch('/new_conversation', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (handleAuthError(res)) return;
+                const data = await res.json();
+                if (res.ok) {
+                    currentConversationId = data.conversation_id;
+                    document.getElementById('messages').innerHTML = '';
+                    addMessage('assistant', 'New conversation started. How can I help you?');
+                } else {
+                    alert('Failed: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
             }
         }
+        async function loadDocuments() {
+            const listDiv = document.getElementById('documentsList');
+            if (!listDiv) {
+                console.error("CRITICAL: documentsList element not found in DOM!");
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/documents?user_id=${encodeURIComponent(userId)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (handleAuthError(res)) return;
+                
+                const data = await res.json();
+                
+                if (data.documents.length === 0) {
+                    listDiv.innerHTML = '<div class="status" style="padding:0.5rem;">No documents loaded</div>';
+                    return;
+                }
+                
+                listDiv.innerHTML = data.documents.map(doc => `
+                    <div class="doc-item">
+                        <span title="${doc.indexed ? 'Indexed in ChromaDB' : 'On disk only'}">
+                            ${doc.indexed ? '🟢' : '⚪'} ${escapeHtml(doc.filename)}
+                        </span>
+                        <button onclick="deleteDocument('${encodeURIComponent(doc.filename)}')" title="Delete">🗑️</button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                listDiv.innerHTML = `<div class="status error" style="padding:0.5rem;">Failed to load</div>`;
+                console.error("loadDocuments error:", e);
+            }
+        }
+
+        async function deleteDocument(encodedFilename) {
+            const filename = decodeURIComponent(encodedFilename);
+            if (!confirm(`Delete "${filename}"?\n\nThis removes the file, its search index, and all extracted figures. This cannot be undone.`)) return;
+            
+            try {
+                const res = await fetch(`/documents/${encodedFilename}?user_id=${encodeURIComponent(userId)}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (handleAuthError(res)) return;
+                
+                const data = await res.json();
+                if (res.ok) {
+                    loadDocuments();
+                } else {
+                    alert(`Delete failed: ${data.detail || 'Unknown error'}`);
+                }
+            } catch (e) {
+                alert(`Delete failed: ${e.message}`);
+            }
+        }
+
+        async function clearMemory() {
+            if (!currentConversationId) {
+                alert('No active conversation to clear.');
+                return;
+            }
+            if (!confirm('Delete this conversation and all its messages? This cannot be undone.')) return;
+            try {
+                const res = await fetch(`/conversations/${currentConversationId}/clear`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (handleAuthError(res)) return;
+                const data = await res.json();
+                if (res.ok) {
+                    document.getElementById('messages').innerHTML = '';
+                    currentConversationId = null;
+                } else {
+                    alert('Failed: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+        async function loadConversations() {
+            try {
+                const res = await fetch(`/conversations?user_id=${encodeURIComponent(userId)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (handleAuthError(res)) return;
+                
+                const data = await res.json();
+                const div = document.getElementById('conversations');
+                if (data.length === 0) {
+                    div.innerHTML = '<div>No past conversations</div>';
+                    return;
+                }
+                div.innerHTML = data.map(c =>
+                    `<div style="padding:0.4rem;border-bottom:1px solid #eee;cursor:pointer;" onclick="loadMessages(${c.conversation_id})">
+                        #${c.conversation_id} — ${c.preview}...
+                    </div>`
+                ).join('');
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function loadMessages(convId) {
+            currentConversationId = convId;
+            document.getElementById('messages').innerHTML = '';
+            
+            try {
+                const res = await fetch(`/conversations/${convId}/messages`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (handleAuthError(res)) return;
+                
+                const messages = await res.json();
+                messages.forEach(m => addMessage(m.role, m.content));
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // Load documents on startup
+        loadDocuments();
     </script>
 </body>
 </html>
