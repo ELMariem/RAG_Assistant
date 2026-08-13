@@ -280,11 +280,17 @@
         function addMessage(role, text) {
             const div = document.createElement('div');
             div.className = `message ${role}`;
-            div.innerHTML = `<div class="meta">${role === 'user' ? 'You' : 'Assistant'}</div>${escapeHtml(text)}`;
+            div.innerHTML = `
+                <div class="meta">${role === 'user' ? 'You' : 'Assistant'}</div>
+                <span class="content">${escapeHtml(text)}</span>
+                `;
             document.getElementById('messages').appendChild(div);
             document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
-        }
-
+            return {
+                div: div,
+                content: div.querySelector('.content')
+            };
+}
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
@@ -313,11 +319,15 @@
             input.value = '';
             btn.disabled = true;
 
+            // Créer le message assistant
             const assistantDiv = document.createElement('div');
             assistantDiv.className = 'message assistant';
             assistantDiv.innerHTML = '<div class="meta">Assistant</div><span class="content"></span>';
             document.getElementById('messages').appendChild(assistantDiv);
+            const contentSpan = assistantDiv.querySelector('.content');
             
+            let fullAnswer = '';
+
             try {
                 const response = await fetch('/ask_stream', {
                     method: 'POST',
@@ -338,44 +348,58 @@
                     return;
                 }
                 
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || `HTTP ${response.status}`);
+                }
+                
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let buffer = '';
-                let fullAnswer = '';
-                
+
                 while (true) {
                     const {done, value} = await reader.read();
-                    if (done) break;
                     
-                    buffer += decoder.decode(value, {stream: true});
-                    const lines = buffer.split('\n');
-                    buffer = lines.pop();
+                    if (value) {
+                        buffer += decoder.decode(value, {stream: true});
+                    }
                     
-                    for (const line of lines) {
+                    // Traiter les lignes complètes au fur et à mesure
+                    let lineEnd;
+                    while ((lineEnd = buffer.indexOf('\n')) !== -1) {
+                        const line = buffer.slice(0, lineEnd).trim();
+                        buffer = buffer.slice(lineEnd + 1);
+                        
                         if (!line.startsWith('data: ')) continue;
                         
-                        const data = JSON.parse(line.slice(6));
-                        
-                        if (data.token) {
-                            fullAnswer += data.token;
-                            assistantDiv.querySelector('.content').textContent = fullAnswer;
-                            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
-                        }
-                        
-                        if (data.done) {
-                            currentConversationId = data.conversation_id;
-                            document.getElementById('backend-badge').textContent = data.backend_used;
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            
+                            if (data.token) {
+                                fullAnswer += data.token;
+                                contentSpan.textContent = fullAnswer;
+                                document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+                            }
+                            
+                            if (data.done) {
+                                currentConversationId = data.conversation_id;
+                                document.getElementById('backend-badge').textContent = data.backend_used || backend;
+                            }
+                        } catch (e) {
+                            // ignorer les lignes malformées
                         }
                     }
+                    
+                    if (done) break;
                 }
             } catch (e) {
-                assistantDiv.querySelector('.content').textContent = 'Error: ' + e.message;
+                console.error("Stream error:", e);
+                contentSpan.textContent = 'Error: ' + e.message;
             }
             
             btn.disabled = false;
             input.focus();
         }
-
         async function uploadFile() {
             const fileInput = document.getElementById('fileInput');
             const status = document.getElementById('uploadStatus');
@@ -535,7 +559,7 @@
                 }
                 div.innerHTML = data.map(c =>
                     `<div style="padding:0.4rem;border-bottom:1px solid #eee;cursor:pointer;" onclick="loadMessages(${c.conversation_id})">
-                        #${c.conversation_id} — ${c.preview}...
+                        #${c.conversation_id} : ${c.preview}...
                     </div>`
                 ).join('');
             } catch (e) {

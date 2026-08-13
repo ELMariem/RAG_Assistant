@@ -10,7 +10,7 @@ from docling.document_converter import DocumentConverter
 import logging
 import config
 import llm_providers
-
+from collections import defaultdict
 logger = logging.getLogger(__name__)
 SUPPORTED_EXTENSIONS = {".pdf", ".docx"}
 
@@ -81,17 +81,11 @@ def get_picture_image(doc, picture, source_path: str, ext: str):
     return None
 
 def process_document(file_path: str, figures_dir: str = None) -> list[dict]:
-    #Route a file to the right processing function based on its extension.
-    ext = os.path.splitext(file_path)[1].lower()
-    if ext in SUPPORTED_EXTENSIONS:
-        return process_docling_document(file_path, figures_dir)
-    raise ValueError(f"Unsupported file type: {ext}")
-
-
-def process_docling_document(file_path: str, figures_dir: str = None) -> list[dict]:
     #Parse one file and return a list of 'blocks' tagged by type.
-
-    figures_dir = figures_dir or config.FIGURES_DIR  # falls back to shared default if not given
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise ValueError(f"Unsupported file type: {ext}")
+    figures_dir = figures_dir or config.FIGURES_DIR
     filename = os.path.basename(file_path)
     ext = os.path.splitext(file_path)[1].lower()
     logger.info(f"--- Processing {filename} ---")
@@ -100,58 +94,128 @@ def process_docling_document(file_path: str, figures_dir: str = None) -> list[di
     converter = DocumentConverter()
     doc = converter.convert(file_path).document
     blocks = []
-    # Plain text blocks
+
+    # ── Plain text blocks : agrégés par page
+    texts_by_page = defaultdict(list)
     for item in doc.texts:
-        blocks.append({
-            "content": item.text,"type": "text",
-            "page": get_page_no(item),"source_file": filename
-        })
+        page_no = get_page_no(item)
+        if item.text and item.text.strip():
+            texts_by_page[page_no].append(item.text.strip())
+
+    for page_no, texts in sorted(texts_by_page.items()):
+        full_page_text = "\n".join(texts)
+
+        # Si la page est courte (< 1000 caractères), un seul chunk
+        if len(full_page_text) <= 1000:
+            blocks.append({
+                "content": full_page_text,
+                "type": "text",
+                "page": page_no,
+                "source_file": filename
+            })
+            continue
+        # Sinon, découper par paragraphes (double saut de ligne)
+        paragraphs = full_page_text.split("\n\n")
+        current_chunk = ""
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+            # Si le paragraphe seul dépasse la limite, on le coupe en phrases
+            if len(para) > 800:
+                if current_chunk.strip():
+                    blocks.append({
+                        "content": current_chunk.strip(),
+                        "type": "text",
+                        "page": page_no,
+                        "source_file": filename
+                    })
+                    current_chunk = ""
+                # Découpage simple par phrases (point + espace)
+                sentences = para.split(". ")
+                temp = ""
+                for sent in sentences:
+                    if len(temp) + len(sent) < 800:
+                        temp += sent + ". "
+                    else:
+                        if temp.strip():
+                            blocks.append({
+                                "content": temp.strip(),
+                                "type": "text",
+                                "page": page_no,
+                                "source_file": filename
+                            })
+                        temp = sent + ". "
+                if temp.strip():
+                    blocks.append({
+                        "content": temp.strip(),
+                        "type": "text",
+                        "page": page_no,
+                        "source_file": filename
+                    })
+                continue
+            # Ajout normal au chunk courant
+            if len(current_chunk) + len(para) < 800:
+                current_chunk += "\n\n" + para if current_chunk else para
+            else:
+                if current_chunk.strip():
+                    blocks.append({
+                        "content": current_chunk.strip(),
+                        "type": "text",
+                        "page": page_no,
+                        "source_file": filename
+                    })
+                current_chunk = para
+        # Ne pas oublier le dernier morceau
+        if current_chunk.strip():
+            blocks.append({
+                "content": current_chunk.strip(),
+                "type": "text",
+                "page": page_no,
+                "source_file": filename
+            })
     #Tables: dual storage (sentences for embedding, JSON for precise answers)
     for table in doc.tables:
         records = table.export_to_dataframe(doc).to_dict(orient="records")
         sentence_version = " ".join(row_to_sentence(row) for row in records)
-
         blocks.append({
-            "content": sentence_version,"type": "table",
-            "page": get_page_no(table),"source_file": filename,
+            "content": sentence_version,
+            "type": "table",
+            "page": get_page_no(table),
+            "source_file": filename,
             "structured": json.dumps(records, ensure_ascii=False)
         })
-    logger.info(f"  Text blocks: {len(doc.texts)} | Tables: {len(doc.tables)} | Diagrams: {len(doc.pictures)}")
-
-    #Diagrams: crop, caption with context, keep image path for later
+    logger.info(f"  Text blocks: {len(doc.texts)} raw lines → {sum(1 for b in blocks if b['type'] == 'text')} aggregated chunks | Tables: {len(doc.tables)} | Diagrams: {len(doc.pictures)}")
+    # Diagrams: crop, caption with context, keep image path for later
     os.makedirs(figures_dir, exist_ok=True)
     skipped_noise = 0
     skipped_unextractable = 0
+
     for i, picture in enumerate(doc.pictures):
         image = get_picture_image(doc, picture, file_path, ext)
-
         if image is None:
             skipped_unextractable += 1
             continue
-
         if not is_significant_figure(image, ext):
             skipped_noise += 1
             continue
-
         page_no = get_page_no(picture)
         logger.info(f"  Captioning diagram (page {page_no}, size {image.size})...")
-
         image_path = os.path.join(figures_dir, f"{filename}_page{page_no}_fig{i}.png")
         image.save(image_path)
-
         context = get_surrounding_text(doc, page_no)
         try:
             description = describe_diagram_with_context(image_path, context)
         except Exception as e:
             logger.warning(f"  Vision model failed for diagram on page {page_no}: {e}")
             description = f"[Diagram on page {page_no} — vision model unavailable]"
-
         blocks.append({
-            "content": description, "type": "diagram",
-            "page": page_no, "source_file": filename,
+            "content": description,
+            "type": "diagram",
+            "page": page_no,
+            "source_file": filename,
             "image_path": image_path
         })
-
     logger.info(
         f"  Kept {len(doc.pictures) - skipped_noise - skipped_unextractable} real diagrams "
         f"(skipped {skipped_noise} noise, {skipped_unextractable} unextractable) "
@@ -162,7 +226,7 @@ def process_docling_document(file_path: str, figures_dir: str = None) -> list[di
     return blocks
 
 def embed_and_store(blocks: list[dict], embed_model, client, collection_name: str = None) -> None:
-    """Embed every block's content and store it in ChromaDB with its metadata."""
+    # Embed every block's content and store it in ChromaDB with its metadata.
     collection_name = collection_name or config.COLLECTION_NAME
     collection = client.get_or_create_collection(collection_name)
     ids = []

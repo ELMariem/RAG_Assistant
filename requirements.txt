@@ -165,3 +165,4 @@ python-jose[cryptography]==3.3.0
 PyJWT==2.10.1
 SQLAlchemy==2.0.36
 pyodbc==5.1.0
+mlflow==2.15.1

@@ -10,7 +10,7 @@ DATA_DIR = os.path.join(BASE_DIR, "data", "documents")   # where your source PDF
 FIGURES_DIR = os.path.join(BASE_DIR, "data", "figures")  # cropped diagram images get saved here
 CHROMA_DIR = os.path.join(BASE_DIR, "chroma_db")         # ChromaDB's persistent storage folder
 
-COLLECTION_NAME = "dataset"  # name of the ChromaDB collection
+COLLECTION_NAME = "Alzeheimer"  # name of the ChromaDB collection
 CONTEXT_WINDOW = 8192
 # Generator: answers the user's question using retrieved text + images
 GENERATOR_MODEL = "qwen2.5vl:7b"
@@ -24,7 +24,8 @@ EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 FIGURE_ZOOM = 2.0          # render resolution
 CONTEXT_MAX_CHARS = 800    # how much surrounding page text to feed the vision model for context
 
-TOP_K = 4  # how many chunks ChromaDB returns per question
+TOP_K = 10  # how many chunks ChromaDB returns per question
+rerank_top_n=4
 
 MAX_HISTORY_TURNS = 5  # how many past question/answer pairs to keep in the conversation buffer
 #filter out tiny figures

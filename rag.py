@@ -6,9 +6,10 @@ import base64
 import config
 import llm_providers
 import logging
+from sentence_transformers import CrossEncoder
 
 logger = logging.getLogger(__name__)
-
+_reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
 def encode_image_base64(path: str) -> str:
     """Read an image file from disk and encode it as base64."""
     with open(path, "rb") as f:
@@ -45,6 +46,15 @@ def retrieve_chunks(query: str, collection, embed_model, top_k: int = None) -> l
         chunks.append({"content": content, "metadata": metadata})
     return chunks
 
+def rerank_chunks(query: str, chunks: list[dict], top_n: int = 4) -> list[dict]:
+    if len(chunks) <= top_n:
+        return chunks
+    
+    pairs = [(query, c["content"]) for c in chunks]
+    scores = _reranker.predict(pairs)
+    
+    scored = sorted(zip(chunks, scores), key=lambda x: x[1], reverse=True)
+    return [c for c, _ in scored[:top_n]]
 
 def build_prompt(query: str, chunks: list[dict], history_text: str = "", include_images: bool = True) -> tuple[str, list[str]]:
     #Assemble the full prompt: conversation history (if any) + retrieved context + question.
@@ -62,27 +72,34 @@ def build_prompt(query: str, chunks: list[dict], history_text: str = "", include
 
     history_section = f"CONVERSATION SO FAR:\n{history_text}\n\n" if history_text else ""
     prompt = f"""{history_section}Based on the following context, answer the question clearly.
+
 CONTEXT:
 {text_context}
 
 QUESTION: {query}
-
+IMPORTANT: You must answer in the SAME LANGUAGE as the QUESTION above. 
+If the question is in French, answer in French. If it is in English, answer in English. 
+Do not translate or switch languages.
 If the question refers back to something discussed earlier in the conversation
 (like "it", "that model", "the same dataset"), use the conversation history above
 to understand what's being referred to.
 If an image is provided alongside the text, look at it directly to verify or add precision —
 don't rely only on the text description of it. If the context is insufficient, say so.
+FORMATTING RULES (important — this answer will be displayed in a plain chat bubble):
+- Do NOT use LaTeX or math notation like \\( \\), \\text{{}}, \\frac{{}}. Write formulas in plain text instead, e.g. "Recall = TP / (TP + FN)".
+- Do NOT use Markdown tables (no | pipes | for columns). If comparing several items, use a short bullet list instead, one bullet per item.
+- Use short paragraphs and bullet points (starting with "-") to structure the answer, not one dense block of text.
+- Use **bold** only for key terms, not entire sentences.
 
 ANSWER:"""
 
     return prompt, images_b64
 
-
 def generate_answer(query: str, chunks: list[dict], backend: str = None, memory=None) -> str:
     #Retrieve-then-generate: build the prompt (with history) and call the configured LLM backend.
 
     backend = (backend or config.LLM_BACKEND).lower()
-
+    chunks = rerank_chunks(query, chunks, top_n=config.rerank_top_n)
     if backend == "groq":
         history_text = memory.get_history_text(max_turns=3) if memory else ""
         include_images = False  # Groq: rely on stored description only
@@ -113,6 +130,8 @@ def generate_answer(query: str, chunks: list[dict], backend: str = None, memory=
 def generate_answer_stream(query: str, chunks: list[dict], backend: str = None, memory=None):
     #Streaming responses: send each token to the browser as soon as it's generated.
     backend = (backend or config.LLM_BACKEND).lower()
+    chunks = rerank_chunks(query, chunks, top_n=config.rerank_top_n)
+    
     if backend == "groq":
         history_text = memory.get_history_text(max_turns=3) if memory else ""
         include_images = False
