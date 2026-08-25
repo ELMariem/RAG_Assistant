@@ -25,16 +25,11 @@ ACCESS_TOKEN_EXPIRE_DAYS = getattr(config, 'JWT_EXPIRE_DAYS', 7)
 if not SECRET_KEY:
     raise ValueError("JWT_SECRET_KEY must be set in config.py or environment")
 
-
-# ── Password Hashing ───────────────────────────────────────────────────────
-
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    """Verify a password against its bcrypt hash."""
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
@@ -170,9 +165,7 @@ def register_user(user_id: str, password: str) -> bool:
 
 
 def authenticate_user(user_id: str, password: str) -> Optional[str]:
-    """
-    Verify credentials and return a JWT token if valid, or None if invalid.
-    """
+    #Verify credentials and return a JWT token if valid, or None if invalid.
     ensure_password_column()
     
     with memory_module.engine.connect() as conn:

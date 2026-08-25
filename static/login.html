@@ -117,8 +117,6 @@
                     showStatus(data.detail || 'Login failed', true);
                     return;
                 }
-                
-                // ── CRITICAL: Handle different response shapes ──
                 let token = null;
                 
                 if (data.access_token && typeof data.access_token === 'string') {
@@ -135,7 +133,6 @@
                     showStatus('Server did not return a token. Check console.', true);
                     return;
                 }
-                
                 // Validate it looks like a JWT (has 2 dots)
                 if (token.split('.').length !== 3) {
                     console.error("❌ Stored value is not a valid JWT:", token);

@@ -154,13 +154,10 @@ def auth_me(current_user: str = Depends(auth_module.get_current_user)):
         "token_valid": True,
         "server_time_utc": datetime.now(timezone.utc).isoformat()
     }
-
+"""
 @app.post("/auth/debug-token")
 def debug_token(token: str = Form(...)):
-    """
-    Debug endpoint: paste a raw token to see what's inside.
-    Does NOT require authentication.
-    """
+
     try:
         # Decode without verification to inspect payload
         unverified = jwt.decode(token, options={"verify_signature": False})
@@ -182,7 +179,7 @@ def debug_token(token: str = Form(...)):
             "error_type": type(e).__name__,
             "token_valid": False
         }
-
+"""
 @app.post("/ask", response_model=AskResponse)
 def ask(
     body: AskRequest,
@@ -412,6 +409,19 @@ def get_conversation_messages(
     current_user: str = Depends(auth_module.get_current_user),
 ) -> list[MessageItem]:
     # Optional: verify this conversation belongs to current_user
+    with memory_module.engine.connect() as conn:
+            result = conn.execute(
+                memory_module.text("""
+                    SELECT user_id FROM conversations
+                    WHERE conversation_id = :conversation_id
+                """),
+                {"conversation_id": conversation_id}
+            )
+            row = result.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Conversation not found")
+            if row[0] != current_user:
+                raise HTTPException(status_code=403, detail="Not your conversation")
     messages = memory_module.get_all_messages(conversation_id)
     return [MessageItem(**m) for m in messages]
 

@@ -7,9 +7,10 @@ import config
 import llm_providers
 import logging
 from sentence_transformers import CrossEncoder
+import numpy as np
 
 logger = logging.getLogger(__name__)
-_reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+_reranker = CrossEncoder('cross-encoder/mmarco-mMiniLMv2-L12-H384-v1')
 def encode_image_base64(path: str) -> str:
     """Read an image file from disk and encode it as base64."""
     with open(path, "rb") as f:
@@ -23,7 +24,7 @@ def fit_chunks_to_context(chunks: list[dict], max_context_tokens: int, reserved_
     running_total = 0
 
     for chunk in chunks:
-        content_tokens = len(chunk["content"]) // 4
+        content_tokens = len(chunk["content"]) // 3
         has_image = chunk["metadata"].get("type") == "diagram" and chunk["metadata"].get("image_path")
         chunk_tokens = content_tokens + (IMAGE_TOKEN_ESTIMATE if has_image else 0)
 
@@ -31,7 +32,6 @@ def fit_chunks_to_context(chunks: list[dict], max_context_tokens: int, reserved_
             break
         kept.append(chunk)
         running_total += chunk_tokens
-
     return kept
 
 def retrieve_chunks(query: str, collection, embed_model, top_k: int = None) -> list[dict]:
@@ -39,7 +39,7 @@ def retrieve_chunks(query: str, collection, embed_model, top_k: int = None) -> l
     top_k = top_k or config.TOP_K
     query_embedding = embed_model.encode(query).tolist()
 
-    results = collection.query(query_embeddings=[query_embedding], n_results=top_k)
+    results = collection.query(query_embeddings=[query_embedding], n_results=top_k, include=["documents", "metadatas", "embeddings"])
 
     chunks = []
     for content, metadata in zip(results["documents"][0], results["metadatas"][0]):
@@ -52,13 +52,30 @@ def rerank_chunks(query: str, chunks: list[dict], top_n: int = 4) -> list[dict]:
     
     pairs = [(query, c["content"]) for c in chunks]
     scores = _reranker.predict(pairs)
-    
     scored = sorted(zip(chunks, scores), key=lambda x: x[1], reverse=True)
-    return [c for c, _ in scored[:top_n]]
+    seen_keys = set()
+    best_per_key = []
+    remaining = []
+    for chunk, score in scored:
+        meta = chunk["metadata"]
+        key = (meta.get("source_file"), meta.get("page"), meta.get("type"))
+        if key not in seen_keys:
+            seen_keys.add(key)
+            best_per_key.append((chunk, score))
+        else:
+            remaining.append((chunk, score))
+
+    selected = best_per_key[:top_n]
+    if len(selected) < top_n:
+        selected += remaining[:top_n - len(selected)]
+
+    # Re-sort by score so the strongest evidence still comes first in the prompt --
+    # diversification only changes WHICH chunks are kept, not their presentation order.
+    selected.sort(key=lambda x: x[1], reverse=True)
+    return [c for c, _ in selected[:top_n]]
 
 def build_prompt(query: str, chunks: list[dict], history_text: str = "", include_images: bool = True) -> tuple[str, list[str]]:
     #Assemble the full prompt: conversation history (if any) + retrieved context + question.
-
     text_context = ""
     images_b64 = []
 
@@ -72,28 +89,41 @@ def build_prompt(query: str, chunks: list[dict], history_text: str = "", include
 
     history_section = f"CONVERSATION SO FAR:\n{history_text}\n\n" if history_text else ""
     prompt = f"""{history_section}Based on the following context, answer the question clearly.
-
 CONTEXT:
 {text_context}
-
+ 
 QUESTION: {query}
-IMPORTANT: You must answer in the SAME LANGUAGE as the QUESTION above. 
-If the question is in French, answer in French. If it is in English, answer in English. 
-Do not translate or switch languages.
-If the question refers back to something discussed earlier in the conversation
-(like "it", "that model", "the same dataset"), use the conversation history above
-to understand what's being referred to.
-If an image is provided alongside the text, look at it directly to verify or add precision —
-don't rely only on the text description of it. If the context is insufficient, say so.
-FORMATTING RULES (important — this answer will be displayed in a plain chat bubble):
-- Do NOT use LaTeX or math notation like \\( \\), \\text{{}}, \\frac{{}}. Write formulas in plain text instead, e.g. "Recall = TP / (TP + FN)".
-- Do NOT use Markdown tables (no | pipes | for columns). If comparing several items, use a short bullet list instead, one bullet per item.
-- Use short paragraphs and bullet points (starting with "-") to structure the answer, not one dense block of text.
-- Use **bold** only for key terms, not entire sentences.
-
+ 
+PRECISION:
+- Copy exact numbers (scores, hyperparameters, counts, measurements) exactly as written — never round, approximate, or infer a figure that isn't visibly present.
+ 
+WHEN THE CONTEXT IS INSUFFICIENT (read carefully):
+- Judge sufficiency on SUBSTANCE, not wording: if the answer is present in different words, in a table row, or across two adjacent sentences, that counts — don't refuse just because it isn't phrased like the question. Loosely related content is NOT the same as an answer, though.
+- If the substance is genuinely absent, say so plainly ("the documents don't provide this information") instead of guessing or restating vague context as an answer — an honest gap always beats a plausible-sounding invention.
+ 
+FOCUS (applies only once you've confirmed the context above actually answers the question):
+- Answer only what's asked — no unrequested background, related facts, or interpretation, even if true and present in the context.
+- Lead with the direct answer in the first sentence; don't preface with setup or restated context.
+- This governs HOW MUCH to say once you have an answer, not whether one exists — that judgment call belongs entirely to the section above.
+ 
+LANGUAGE:
+- Answer in the SAME LANGUAGE as the question above. If the question is in French, answer in French; if in English, answer in English. Do not translate or switch languages.
+ 
+CONVERSATION CONTEXT:
+- If the question refers back to something discussed earlier ("it", "that model", "the same dataset"), use the conversation history above to resolve what's being referred to.
+ 
+IMAGES:
+- If an image is provided alongside the text, look at it directly to verify or add precision — don't rely only on the text description of it.
+ 
+FORMATTING (this answer will be displayed in a plain chat bubble):
+- No LaTeX/math notation (\\( \\), \\frac{{}}) — write formulas in plain text, e.g. "Recall = TP / (TP + FN)". No Markdown tables (no | pipes); use a short bullet list instead.
+- Use short paragraphs and bullet points ("-"), not one dense block of text. Bold only key terms, not full sentences.
+ 
 ANSWER:"""
-
     return prompt, images_b64
+
+_TEMPLATE_TOKENS = len(build_prompt("", [], "", include_images=False)[0]) // 4
+ANSWER_TOKEN_BUDGET = 500  # true free space intended for the model's generated answer text
 
 def generate_answer(query: str, chunks: list[dict], backend: str = None, memory=None) -> str:
     #Retrieve-then-generate: build the prompt (with history) and call the configured LLM backend.
@@ -108,9 +138,10 @@ def generate_answer(query: str, chunks: list[dict], backend: str = None, memory=
         include_images = True
         
     if backend == "ollama":
-        history_tokens = len(history_text) // 4
+        history_tokens = len(history_text) // 3
         original_count = len(chunks)
-        chunks = fit_chunks_to_context(chunks, config.CONTEXT_WINDOW, reserved_for_answer=1200 + history_tokens)
+        reserved = ANSWER_TOKEN_BUDGET + _TEMPLATE_TOKENS + history_tokens
+        chunks = fit_chunks_to_context(chunks, config.CONTEXT_WINDOW, reserved_for_answer=reserved)
         if len(chunks) < original_count:
             logger.info(f"(Trimmed context: using {len(chunks)}/{original_count} retrieved chunks to fit Ollama's context window)")
 
@@ -140,9 +171,10 @@ def generate_answer_stream(query: str, chunks: list[dict], backend: str = None, 
         include_images = True
 
     if backend == "ollama":
-        history_tokens = len(history_text) // 4
+        history_tokens = len(history_text) // 3
         original_count = len(chunks)
-        chunks = fit_chunks_to_context(chunks, config.CONTEXT_WINDOW, reserved_for_answer=1200 + history_tokens)
+        reserved = ANSWER_TOKEN_BUDGET + _TEMPLATE_TOKENS + history_tokens
+        chunks = fit_chunks_to_context(chunks, config.CONTEXT_WINDOW, reserved_for_answer=reserved)
         if len(chunks) < original_count:
             logger.info(f"Trimmed context: {len(chunks)}/{original_count}")
 

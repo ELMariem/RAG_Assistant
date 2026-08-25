@@ -10,6 +10,9 @@ import ingest
 import rag
 import memory as memory_module
 
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def get_already_ingested_files(collection) -> set:
     existing = collection.get(include=["metadatas"])
