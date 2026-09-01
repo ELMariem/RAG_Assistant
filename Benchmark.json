@@ -1,0 +1,279 @@
+{
+  "_meta": {
+    "domain": "Alzheimer's disease detection research assistant",
+    "how_to_use": "Each test_case is one golden (question, expected_answer) pair. 'relevant_sources' lists every (source_file, page) that legitimately supports the answer. Matching on (source_file, page) survives re-ingestion and re-chunking.",
+    "dataset_size": "Exactly 20 test_cases, highly optimized for RAG evaluation (Ragas/TruLens).",
+    "workflow": "Curated to include cross-lingual queries (EN/FR), high-impact reasoning (PCA vs XGBoost), multi-hop logic, and adversarial unanswerable checks."
+  },
+  "test_cases": [
+    {
+      "id": "tc_001",
+      "question": "Selon le protocole d'acquisition du dataset OpenNeuro ds004504, quelle était l'impédance de la peau exigée avant chaque enregistrement EEG ?",
+      "expected_answer": "L'impédance de la peau devait être maintenue en dessous de 5 kΩ avant l'initialisation de chaque enregistrement.",
+      "relevant_sources": [
+        {
+          "source_file": "Data_description.pdf",
+          "page": 1
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_031",
+      "question": "What are the three clinical groups in the OpenNeuro ds004504 dataset and their respective patient counts?",
+      "expected_answer": "The dataset includes 36 subjects with Alzheimer's disease (AD group), 23 subjects with Frontotemporal Dementia (FTD group), and 29 healthy control (CN group) subjects.",
+      "relevant_sources": [
+        {
+          "source_file": "Data_description.pdf",
+          "page": 1
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "easy",
+      "language": "en"
+    },
+    {
+      "id": "tc_034",
+      "question": "Quelle architecture de réseau est utilisée dans la voie B (Étape 2B) du Chapitre 2 et quelle est la dimension de l'embedding généré ?",
+      "expected_answer": "La voie B utilise un réseau convolutionnel 1D (1D-CNN) pour extraire des embeddings finaux d'une dimension de 128.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 16
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_016",
+      "question": "Quel type de noyau est explicitement recommandé pour trouver la frontière de décision optimale avec le modèle SVM dans la description initiale du sujet (Sujet_PPP.pdf) ?",
+      "expected_answer": "Dans la description du sujet, il est recommandé d'utiliser un modèle SVM avec un noyau linéaire pour trouver la frontière de décision optimale.",
+      "relevant_sources": [
+        {
+          "source_file": "Sujet_PPP.pdf",
+          "page": 1
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_002",
+      "question": "Dans l'approche Machine Learning, quelles sont les performances moyennes d'accuracy (Acc.) et d'AUC-ROC (AUC) du modèle Random Forest (RF) optimisé sur le jeu de données complet ?",
+      "expected_answer": "Le modèle Random Forest (RF) optimisé atteint une accuracy moyenne de 0.800 et une AUC-ROC de 0.862 sur le jeu de données complet de 316 features.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 9
+        }
+      ],
+      "category": "table",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_007",
+      "question": "Selon le Tableau 1.1 détaillant le vecteur de caractéristiques, combien de features sont générées par la famille Spectrale au niveau du segment ?",
+      "expected_answer": "La famille Spectrale génère 16 features au niveau du segment, correspondant à 4 bandes de fréquences multipliées par 4 statistiques.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 5
+        }
+      ],
+      "category": "table",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_012",
+      "question": "D'après le tableau de comparaison des modèles (Tableau 1.2), quels sont les paramètres clés (hyperparamètres,y compris symboles mathématiques)) associés au modèle SVM à noyau RBF ?",
+      "expected_answer": "Les paramètres clés associés au modèle SVM à noyau RBF sont 'C' (pénalisation d'erreur) et 'gamma' (largeur du noyau RBF).",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 6
+        }
+      ],
+      "category": "table",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_028",
+      "question": "Dans le Tableau 1.5, quel modèle offre le meilleur équilibre global si l'on se fie uniquement à la métrique F1-score ?",
+      "expected_answer": "Selon le Tableau 1.5, c'est le modèle XGBoost qui offre le meilleur F1-score avec une valeur de 0.824.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 9
+        }
+      ],
+      "category": "table",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_003",
+      "question": "Que révèle l'analyse temporelle SHAP concernant la détection des caractéristiques discriminantes pour la classe saine (CN) par rapport aux classes Alzheimer (AD) et démence fronto-temporale (FTD) ?",
+      "expected_answer": "La dynamique temporelle de l'importance SHAP montre que pour les patients sains (CN), l'importance décisionnelle est distribuée dans le temps, tandis que pour les classes AD et FTD, le modèle réagit à des pics d'importance soudains et très localisés.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 21
+        }
+      ],
+      "category": "diagram",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_008",
+      "question": "Quelles régions cérébrales les zones en rouge sombre indiquent-elles sur les cartographies topographiques de l'attention du modèle (Topomaps SHAP) ?",
+      "expected_answer": "Les zones en rouge sombre sur les cartographies topographiques indiquent les régions cérébrales les plus déterminantes pour la classification, spécifiquement les régions temporo-pariétales.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 21
+        }
+      ],
+      "category": "diagram",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_023",
+      "question": "Dans le diagramme de l'architecture 1D-CNN (Figure 2.2), quelle couche d'activation est appliquée juste après la couche Dense de taille 128 ?",
+      "expected_answer": "La fonction d'activation appliquée juste après la couche Dense de taille 128 est la fonction ReLU.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 17
+        }
+      ],
+      "category": "diagram",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_029",
+      "question": "D'après la figure 1.4 représentant la matrice de confusion normalisée du SVM, quel est la valeur de faux négatifs pour la classe AD ?",
+      "expected_answer": "La matrice de confusion indique un taux de faux négatifs de 19 % (0.19) pour la classe AD, c'est-à-dire des patients Alzheimer classés à tort comme contrôles.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 9
+        }
+      ],
+      "category": "diagram",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_004",
+      "question": "Quel est le déséquilibre initial des classes entre les patients Alzheimer et les patients atteints de démence fronto-temporale dans la base de données, et quelle technique spécifique est utilisée dans l'approche hybride Deep-SVM pour corriger ce problème ?",
+      "expected_answer": "Il y a initialement 36 patients atteints de la maladie d'Alzheimer (AD) et 23 patients atteints de démence fronto-temporale (FTD). Pour corriger ce déséquilibre, la technique SMOTE est appliquée sur la classe minoritaire, mais exclusivement sur les plis d'entraînement pour éviter toute fuite de données.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 2
+        },
+        {
+          "source_file": "ppp.pdf",
+          "page": 18
+        }
+      ],
+      "category": "multi_hop",
+      "difficulty": "hard",
+      "language": "fr"
+    },
+    {
+      "id": "tc_009",
+      "question": "Pourquoi la méthode de Welch a-t-elle été préférée à la Fast Fourier Transform (FFT) pour l'extraction des caractéristiques fréquentielles dans le pipeline Machine Learning ?",
+      "expected_answer": "La méthode de Welch a été préférée car la Fast Fourier Transform (FFT) suppose que le signal est stationnaire, ce qui n'est pas le cas pour les signaux EEG de cette étude.",
+      "relevant_sources": [
+        {
+          "source_file": "pipeline_ppp.docx",
+          "page": 1
+        }
+      ],
+      "category": "multi_hop",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_014",
+      "question": "Quelles sont les deux bandes de fréquences additionnées au numérateur pour calculer le ratio 'slow-to-fast', et quelle est l'étendue en Hz de la bande de fréquence au dénominateur ?",
+      "expected_answer": "Les bandes delta et theta sont additionnées au numérateur pour calculer le ratio 'slow-to-fast', tandis que le dénominateur est la bande alpha, dont l'étendue est de 8 à 13 Hz.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 5
+        }
+      ],
+      "category": "multi_hop",
+      "difficulty": "hard",
+      "language": "fr"
+    },
+    {
+      "id": "tc_032",
+      "question": "What is the primary difference in the classification approach between Chapter 1 and Chapter 2?",
+      "expected_answer": "Chapter 1 utilizes a classical Machine Learning approach for binary classification (AD vs. CN) using 316 handcrafted features, whereas Chapter 2 proposes a hybrid Deep Learning-SVM approach for tri-class classification (AD, FTD, CN) using a 1D-CNN to extract embeddings.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 14
+        }
+      ],
+      "category": "multi_hop",
+      "difficulty": "medium",
+      "language": "en"
+    },
+    {
+      "id": "tc_036",
+      "question": "Selon la discussion du Chapitre 1, pourquoi le modèle SVM devient-il plus performant que XGBoost après l'application de la réduction dimensionnelle PCA ?",
+      "expected_answer": "Le modèle SVM devient plus performant que XGBoost après l'application de la réduction dimensionnelle PCA car la PCA débruite l'espace, élimine la multicolinéarité et restaure l'efficacité des métriques à noyau (notamment RBF) qui dégradent en très haute dimension par concentration de la mesure.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 12
+        }
+      ],
+      "category": "multi_hop",
+      "difficulty": "hard",
+      "language": "fr"
+    },
+    {
+      "id": "tc_005",
+      "question": "Quel est le traitement médicamenteux spécifique prescrit aux patients du groupe Alzheimer dans la cohorte OpenNeuro ds004504 étudiée ?",
+      "expected_answer": "Les documents fournis ne contiennent pas cette information.",
+      "relevant_sources": [],
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "language": "fr"
+    },
+    {
+      "id": "tc_015",
+      "question": "Quel est le nom des neurologues spécifiques qui ont supervisé la collecte des données au 2ème département de neurologie de l'hôpital général AHEPA ?",
+      "expected_answer": "Les documents fournis ne contiennent pas cette information.",
+      "relevant_sources": [],
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_030",
+      "question": "Quelle est la date exacte de soumission du Projet Professionnel Personnel (PPP) à l'Université de Carthage ?",
+      "expected_answer": "Les documents fournis ne contiennent pas cette information.",
+      "relevant_sources": [],
+      "category": "unanswerable",
+      "difficulty": "easy",
+      "language": "fr"
+    }
+  ]
+}

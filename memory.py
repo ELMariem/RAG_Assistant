@@ -14,7 +14,7 @@ engine = create_engine(
     DB_URL,
     pool_pre_ping=True,
     pool_recycle=3600,
-    future=True  # SQLAlchemy 2.0 style
+    future=True
 )
 
 def init_db() -> None:

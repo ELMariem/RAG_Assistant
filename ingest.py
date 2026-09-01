@@ -219,7 +219,6 @@ def _token_len(text: str) -> int:
     return len(_tokenizer.encode(text, add_special_tokens=False))
 
 def split_into_token_chunks(paragraphs: list[str], chunk_size: int, overlap: int) -> list[str]:
-    """Pack paragraphs into token-budgeted chunks, splitting oversized paragraphs by sentence, with overlap between consecutive chunks."""
     units = []
     for para in paragraphs:
         if _token_len(para) <= chunk_size:
@@ -285,10 +284,6 @@ def get_picture_image(doc, picture, source_path: str, ext: str):
 DOT_LEADER_RE = re.compile(r'\.\s*\.\s*\.\s*\.')
 
 def is_navigational_table(headers: list[str], records: list[dict]) -> bool:
-    """
-    Filter out tables of contents / glossaries that Docling detects as grid
-    structures but which aren't real data tables.
-    """
     combined = " ".join(headers)
     if DOT_LEADER_RE.search(combined):
         return True
@@ -309,7 +304,6 @@ def is_navigational_table(headers: list[str], records: list[dict]) -> bool:
     return False
 
 def process_table(table, doc, filename: str) -> list[dict]:
-    """Split large tables by row groups; every chunk repeats the caption and real column headers."""
     raw_records = table.export_to_dataframe(doc).to_dict(orient="records")
     headers, records = get_table_header(raw_records)
     if is_navigational_table(headers, records):
@@ -345,7 +339,7 @@ def get_printed_page_number(pdf_path: str, physical_page_no: int) -> str | None:
     page = pdf[physical_page_no - 1]
     page_height = page.rect.height
 
-    blocks = page.get_text("blocks")  # each: (x0, y0, x1, y1, text, block_no, block_type)
+    blocks = page.get_text("blocks")
     candidates = []
     for b in blocks:
         text = b[4].strip()
@@ -392,7 +386,7 @@ def process_document(file_path: str, figures_dir: str = None) -> list[dict]:
     doc = converter.convert(file_path).document
     blocks = []
  
-    # --- token-based text chunking ---
+    #token-based text chunking
     sections = extract_sections(doc)
     for section in sections:
         for chunk_text in split_into_token_chunks(section["texts"], config.CHUNK_TOKEN_SIZE, config.CHUNK_TOKEN_OVERLAP):
@@ -406,12 +400,12 @@ def process_document(file_path: str, figures_dir: str = None) -> list[dict]:
             })
     logger.info(f"  {len(sections)} sections → {sum(1 for b in blocks if b['type'] == 'text')} text chunks")
  
-    # --- Table-aware chunking ---
+    #Table-aware chunking
     for table in doc.tables:
         blocks.extend(process_table(table, doc, filename))
     logger.info(f"  Tables: {len(doc.tables)} → {sum(1 for b in blocks if b['type'] == 'table')} table chunks")
  
-    # --- Diagram ---
+    #Diagram
     blocks.extend(process_diagrams(doc, file_path, filename, figures_dir))
  
     logger.info(f"--- Finished {filename} in {time.time() - start_time:.1f}s, {len(blocks)} blocks ---")

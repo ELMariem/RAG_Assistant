@@ -35,7 +35,7 @@ class OllamaProvider(LLMProvider):
             response = ollama.chat(
                 model=self.model,
                 messages=[message],
-                options={"num_ctx": config.CONTEXT_WINDOW}
+                options={"num_ctx": config.CONTEXT_WINDOW, "temperature": 0.0}
             )
             return response["message"]["content"]
         except Exception as e:
@@ -49,7 +49,7 @@ class OllamaProvider(LLMProvider):
             stream = ollama.chat(
                 model=self.model,
                 messages=[message],
-                options={"num_ctx": config.CONTEXT_WINDOW},
+                options={"num_ctx": config.CONTEXT_WINDOW, "temperature": 0.0},
                 stream=True
             )
             for chunk in stream:
@@ -60,14 +60,16 @@ class OllamaProvider(LLMProvider):
  
 class GroqProvider(LLMProvider):
 #Fast cloud inference via Groq.
-    def __init__(self, model: str = None, vision_model: str = None):
+    def __init__(self, model: str = None, vision_model: str = None, api_key: str = None):
         from groq import Groq, RateLimitError  #Ollama-only users don't need the package installed
  
-        api_key = os.environ.get("GROQ_API_KEY")
-        if not api_key:
-            raise ValueError("GROQ_API_KEY environment variable not set. Get one at console.groq.com")
- 
-        self.client = Groq(api_key=api_key)
+        resolved_key = os.environ.get("GROQ_API_KEY") or api_key
+        if not resolved_key:
+            raise ValueError(
+                "No Groq API key available: set GROQ_API_KEY on the server, "
+                "or provide your own key from the client."
+            )
+        self.client = Groq(api_key=resolved_key)
         self.model = model or config.GROQ_MODEL
         self.vision_model = vision_model or config.GROQ_VISION_MODEL
         self.rate_limit_error = RateLimitError
@@ -188,13 +190,13 @@ class GroqProvider(LLMProvider):
                 raise RuntimeError(f"Groq stream error: {e}") from e
  
  
-def get_llm_provider(backend: str = None) -> LLMProvider:
+def get_llm_provider(backend: str = None, api_key: str = None) -> LLMProvider:
  
     backend = (backend or config.LLM_BACKEND).lower()
     logger.info(f"[DEBUG] Using LLM backend: {backend}")
     if backend == "ollama":
         return OllamaProvider()
     elif backend == "groq":
-        return GroqProvider()
+        return GroqProvider(api_key=api_key)
     else:
         raise ValueError(f"Unknown LLM backend: {backend}. Use 'ollama' or 'groq'.")

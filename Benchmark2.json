@@ -1,0 +1,479 @@
+{
+  "_meta": {
+    "domain": "Alzheimer's disease detection research assistant",
+    "how_to_use": "Each test_case is one golden (question, expected_answer) pair. 'relevant_sources' lists every (source_file, page) that legitimately supports the answer. Matching on (source_file, page) survives re-ingestion and re-chunking.",
+    "minimum_recommended_size": "50-100 test_cases, mixing categories and difficulties (see Bonnes Pratiques in Metrique_RAG.pdf)",
+    "workflow": "A human domain expert has reviewed every draft, fixed expected_answers to be full sentences, deleted bad questions, and added hand-written edge cases including unanswerable questions."
+  },
+  "test_cases": [
+    {
+      "id": "tc_001",
+      "question": "Selon le protocole d'acquisition du dataset OpenNeuro ds004504, quelle était l'impédance de la peau exigée avant chaque enregistrement EEG ?",
+      "expected_answer": "L'impédance de la peau devait être maintenue en dessous de 5 kΩ avant l'initialisation de chaque enregistrement.",
+      "relevant_sources": [
+        {
+          "source_file": "Data_description.pdf",
+          "page": 1
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_002",
+      "question": "Dans l'approche Machine Learning, quelles sont les performances moyennes d'accuracy (Acc.) et d'AUC-ROC (AUC) du modèle Random Forest (RF) optimisé sur le jeu de données complet ?",
+      "expected_answer": "Le modèle Random Forest (RF) optimisé atteint une accuracy moyenne de 0.800 et une AUC-ROC de 0.862 sur le jeu de données complet de 316 features.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 9
+        }
+      ],
+      "category": "table",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_003",
+      "question": "Que révèle l'analyse temporelle SHAP concernant la détection des caractéristiques discriminantes pour la classe saine (CN) par rapport aux classes Alzheimer (AD) et démence fronto-temporale (FTD) ?",
+      "expected_answer": "La dynamique temporelle de l'importance SHAP montre que pour les patients sains (CN), l'importance décisionnelle est distribuée dans le temps, tandis que pour les classes AD et FTD, le modèle réagit à des pics d'importance soudains et très localisés.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 21
+        }
+      ],
+      "category": "diagram",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_004",
+      "question": "Quel est le déséquilibre initial des classes entre les patients Alzheimer et les patients atteints de démence fronto-temporale dans la base de données, et quelle technique spécifique est utilisée dans l'approche hybride Deep-SVM pour corriger ce problème ?",
+      "expected_answer": "Il y a initialement 36 patients atteints de la maladie d'Alzheimer (AD) et 23 patients atteints de démence fronto-temporale (FTD). Pour corriger ce déséquilibre, la technique SMOTE est appliquée sur la classe minoritaire, mais exclusivement sur les plis d'entraînement pour éviter toute fuite de données.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 2
+        },
+        {
+          "source_file": "ppp.pdf",
+          "page": 18
+        }
+      ],
+      "category": "multi_hop",
+      "difficulty": "hard",
+      "language": "fr"
+    },
+    {
+      "id": "tc_005",
+      "question": "Quel est le traitement médicamenteux spécifique prescrit aux patients du groupe Alzheimer dans la cohorte OpenNeuro ds004504 étudiée ?",
+      "expected_answer": "Les documents fournis ne contiennent pas cette information.",
+      "relevant_sources": [],
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "language": "fr",
+      "note": "Critical category: this tests if the system hallucinates clinical data when it is absent from the corpus."
+    },
+    {
+      "id": "tc_006",
+      "question": "Quelle était la valeur médiane de la durée de la maladie en mois pour les patients de l'étude, et quel était l'écart interquartile (IQR) associé ?",
+      "expected_answer": "La valeur médiane de la durée de la maladie était de 25 mois, avec un écart interquartile (IQR) allant de 24 à 28,5 mois.",
+      "relevant_sources": [
+        {
+          "source_file": "Data_description.pdf",
+          "page": 1
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_007",
+      "question": "Selon le Tableau 1.1 détaillant le vecteur de caractéristiques, combien de features sont générées par la famille Spectrale au niveau du segment ?",
+      "expected_answer": "La famille Spectrale génère 16 features au niveau du segment, correspondant à 4 bandes de fréquences multipliées par 4 statistiques.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 5
+        }
+      ],
+      "category": "table",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_008",
+      "question": "Quelles régions cérébrales les zones en rouge sombre indiquent-elles sur les cartographies topographiques de l'attention du modèle (Topomaps SHAP) ?",
+      "expected_answer": "Les zones en rouge sombre sur les cartographies topographiques indiquent les régions cérébrales les plus déterminantes pour la classification, spécifiquement les régions temporo-pariétales.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 21
+        }
+      ],
+      "category": "diagram",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_009",
+      "question": "Pourquoi la méthode de Welch a-t-elle été préférée à la Fast Fourier Transform (FFT) pour l'extraction des caractéristiques fréquentielles dans le pipeline Machine Learning ?",
+      "expected_answer": "La méthode de Welch a été préférée car la Fast Fourier Transform (FFT) suppose que le signal est stationnaire, ce qui n'est pas le cas pour les signaux EEG de cette étude.",
+      "relevant_sources": [
+        {
+          "source_file": "pipeline_ppp.docx",
+          "page": 1
+        }
+      ],
+      "category": "multi_hop",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_010",
+      "question": "Quelles étaient les températures exactes de la salle de test lors des enregistrements EEG des patients Alzheimer ?",
+      "expected_answer": "Les documents fournis ne contiennent pas cette information.",
+      "relevant_sources": [],
+      "category": "unanswerable",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_011",
+      "question": "Quel outil de test psychologique a été utilisé pour évaluer l'état cognitif et neuropsychologique des participants au dataset OpenNeuro ?",
+      "expected_answer": "L'état cognitif et neuropsychologique a été évalué à l'aide du Mini-Mental State Examination (MMSE) international.",
+      "relevant_sources": [
+        {
+          "source_file": "Data_description.pdf",
+          "page": 1
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_012",
+      "question": "D'après le tableau de comparaison des modèles (Tableau 1.2), quels sont les paramètres clés (hyperparamètres,y compris les symboles)) associés au modèle SVM à noyau RBF ?",
+      "expected_answer": "Les paramètres clés associés au modèle SVM à noyau RBF sont 'C' (pénalisation d'erreur) et 'gamma' (largeur du noyau RBF).",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 6
+        }
+      ],
+      "category": "table",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_013",
+      "question": "D'après la figure 2.1 illustrant l'architecture globale, quelles sont les deux voies parallèles utilisées avant l'étape de fusion ?",
+      "expected_answer": "Les deux voies parallèles utilisées avant l'étape de fusion sont la Voie A (Features Handcrafted) et la Voie B (1D-CNN pour l'extraction d'embeddings).",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 15
+        }
+      ],
+      "category": "diagram",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_014",
+      "question": "Quelles sont les deux bandes de fréquences additionnées au numérateur pour calculer le ratio 'slow-to-fast', et quelle est l'étendue en Hz de la bande de fréquence au dénominateur ?",
+      "expected_answer": "Les bandes delta et theta sont additionnées au numérateur pour calculer le ratio 'slow-to-fast', tandis que le dénominateur est la bande alpha, dont l'étendue est de 8 à 13 Hz.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 5
+        }
+      ],
+      "category": "multi_hop",
+      "difficulty": "hard",
+      "language": "fr"
+    },
+    {
+      "id": "tc_015",
+      "question": "Quel est le nom des neurologues spécifiques qui ont supervisé la collecte des données au 2ème département de neurologie de l'hôpital général AHEPA ?",
+      "expected_answer": "Les documents fournis ne contiennent pas cette information.",
+      "relevant_sources": [],
+      "category": "unanswerable",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_016",
+      "question": "Quel type de noyau est explicitement recommandé pour trouver la frontière de décision optimale avec le modèle SVM dans la description initiale du sujet (Sujet_PPP.pdf) ?",
+      "expected_answer": "Dans la description du sujet, il est recommandé d'utiliser un modèle SVM avec un noyau linéaire pour trouver la frontière de décision optimale.",
+      "relevant_sources": [
+        {
+          "source_file": "Sujet_PPP.pdf",
+          "page": 1
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_017",
+      "question": "Selon le Tableau 1.3 concernant les meilleurs hyperparamètres, quelle est la valeur optimale trouvée pour le 'learning_rate' du modèle XGBoost ?",
+      "expected_answer": "La valeur optimale trouvée pour le 'learning_rate' du modèle XGBoost est de 0.2503.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 7
+        }
+      ],
+      "category": "table",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_018",
+      "question": "Dans le modèle hybride CNN-LSTM, quelle sous-composante de la mémoire LSTM décide si le ralentissement observé à l'instant précédent est pertinent ou s'il s'agit de bruit ?",
+      "expected_answer": "La sous-composante de la mémoire LSTM qui prend cette décision est la 'Forget Gate' (Porte d'oubli).",
+      "relevant_sources": [
+        {
+          "source_file": "pipeline_ppp.docx",
+          "page": 1
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_019",
+      "question": "Comment la méthode de normalisation diffère-t-elle entre le pipeline ML traditionnel et le pipeline Deep Learning pour les signaux EEG de cette étude ?",
+      "expected_answer": "Les deux pipelines, ML traditionnel et Deep Learning (EEGNet), utilisent la même méthode de normalisation, qui est la normalisation Z-score par canal.",
+      "relevant_sources": [
+        {
+          "source_file": "pipeline_ppp.docx",
+          "page": 1
+        }
+      ],
+      "category": "multi_hop",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_020",
+      "question": "Quelles étaient les professions ou les métiers des 29 sujets sains inclus dans le groupe de contrôle (CN) ?",
+      "expected_answer": "Les documents fournis ne contiennent pas cette information.",
+      "relevant_sources": [],
+      "category": "unanswerable",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_021",
+      "question": "Quelle métrique est utilisée pour évaluer l'instabilité du signal dans le domaine temporel en mesurant l'asymétrie de la distribution ?",
+      "expected_answer": "La métrique utilisée pour évaluer l'instabilité du signal via l'asymétrie de la distribution est le 'skewness'.",
+      "relevant_sources": [
+        {
+          "source_file": "Sujet_PPP.pdf",
+          "page": 1
+        },
+        {
+          "source_file": "ppp.pdf",
+          "page": 4
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_022",
+      "question": "D'après le Tableau 2.1, quelle est la précision (Accuracy) par époque rapportée par l'article de référence original [12] ?",
+      "expected_answer": "Le tableau indique que l'accuracy par époque pour l'article de référence n'est pas précisée (Non précisé).",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 19
+        }
+      ],
+      "category": "table",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_023",
+      "question": "Dans le diagramme de l'architecture 1D-CNN (Figure 2.2), quelle couche d'activation est appliquée juste après la couche Dense de taille 128 ?",
+      "expected_answer": "La fonction d'activation appliquée juste après la couche Dense de taille 128 est la fonction ReLU.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 17
+        }
+      ],
+      "category": "diagram",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_024",
+      "question": "Quel était le taux d'échantillonnage de l'appareil Nihon Kohden EEG 2100 lors des acquisitions et quelle était la résolution appliquée ?",
+      "expected_answer": "Le taux d'échantillonnage était de 500 Hz avec une résolution de 10 uV/mm.",
+      "relevant_sources": [
+        {
+          "source_file": "Data_description.pdf",
+          "page": 1
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_025",
+      "question": "Sur quelle version précise de Python le code des modèles Deep Learning a-t-il été exécuté ?",
+      "expected_answer": "Les documents fournis ne contiennent pas cette information.",
+      "relevant_sources": [],
+      "category": "unanswerable",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_026",
+      "question": "Combien de filtres temporels (F1) sont explicitement définis dans le schéma détaillé du modèle EEGNet utilisé dans cette étude ?",
+      "expected_answer": "Le document mentionne qu'il faut régler le nombre de filtres temporels F1 pour l'optimisation, mais ne fournit pas le nombre exact utilisé dans l'étude.",
+      "relevant_sources": [
+        {
+          "source_file": "pipeline_ppp.docx",
+          "page": 1
+        }
+      ],
+      "category": "multi_hop",
+      "difficulty": "hard",
+      "language": "fr"
+    },
+    {
+      "id": "tc_027",
+      "question": "Quelles sont les paires d'électrodes utilisées pour calculer la cohérence alpha inter-hémisphérique (MAC) dans l'approche hybride ?",
+      "expected_answer": "Les cinq paires symétriques utilisées pour calculer la cohérence alpha inter-hémisphérique sont F3-F4, C3-C4, P3-P4, O1-O2 et T3-T4.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 16
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_028",
+      "question": "Dans le Tableau 1.5, quel modèle offre le meilleur équilibre global si l'on se fie uniquement à la métrique F1-score ?",
+      "expected_answer": "Selon le Tableau 1.5, c'est le modèle XGBoost qui offre le meilleur F1-score avec une valeur de 0.824.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 9
+        }
+      ],
+      "category": "table",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_029",
+      "question": "D'après la figure 1.4 représentant la matrice de confusion normalisée du SVM, quelle est la valeur de faux négatifs pour la classe AD ?",
+      "expected_answer": "La matrice de confusion indique un taux de faux négatifs de 19 % (0.19) pour la classe AD, c'est-à-dire des patients Alzheimer classés à tort comme contrôles.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 9
+        }
+      ],
+      "category": "diagram",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_030",
+      "question": "Quelle est la date exacte de soumission du Projet Professionnel Personnel (PPP) à l'Université de Carthage ?",
+      "expected_answer": "Les documents fournis ne contiennent pas cette information.",
+      "relevant_sources": [],
+      "category": "unanswerable",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_031",
+      "question": "What are the three clinical groups in the OpenNeuro ds004504 dataset and their respective patient counts?",
+      "expected_answer": "The dataset includes 36 subjects with Alzheimer's disease (AD group), 23 subjects with Frontotemporal Dementia (FTD group), and 29 healthy control (CN group) subjects.",
+      "relevant_sources": [
+        {
+          "source_file": "Data_description.pdf",
+          "page": 1
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "easy",
+      "language": "en"
+    },
+    {
+      "id": "tc_032",
+      "question": "What is the primary difference in the classification approach between Chapter 1 and Chapter 2?",
+      "expected_answer": "Chapter 1 utilizes a classical Machine Learning approach for binary classification (AD vs. CN) using 316 handcrafted features, whereas Chapter 2 proposes a hybrid Deep Learning-SVM approach for tri-class classification (AD, FTD, CN) using a 1D-CNN to extract embeddings.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 14
+        }
+      ],
+      "category": "multi_hop",
+      "difficulty": "medium",
+      "language": "en"
+    },
+    {
+      "id": "tc_033",
+      "question": "Quels sont les quatre modèles d'apprentissage automatique évalués et comparés dans le Chapitre 1 ?",
+      "expected_answer": "Les quatre modèles comparés dans le Chapitre 1 sont le SVM, le KNN, le Random Forest (RF) et XGBoost.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 6
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "easy",
+      "language": "fr"
+    },
+    {
+      "id": "tc_034",
+      "question": "Quelle architecture de réseau est utilisée dans la voie B (Étape 2B) du Chapitre 2 et quelle est la dimension de l'embedding généré ?",
+      "expected_answer": "La voie B utilise un réseau convolutionnel 1D (1D-CNN) pour extraire des embeddings finaux d'une dimension de 128.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 16
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "medium",
+      "language": "fr"
+    },
+    {
+      "id": "tc_035",
+      "question": "Quels sont les hyperparamètres optimaux retenus pour le modèle SVM à noyau RBF dans l'approche hybride du Chapitre 2 ?",
+      "expected_answer": "Dans l'approche hybride du Chapitre 2, les hyperparamètres optimaux sélectionnés par grid search pour le SVM sont C=1 et gamma=0,01.",
+      "relevant_sources": [
+        {
+          "source_file": "ppp.pdf",
+          "page": 18
+        }
+      ],
+      "category": "factual_single_chunk",
+      "difficulty": "medium",
+      "language": "fr"
+    }
+  ]
+}

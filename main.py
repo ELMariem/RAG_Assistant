@@ -3,7 +3,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse, FileResponse
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 import chromadb
@@ -12,6 +12,7 @@ import rag
 import memory as memory_module
 import auth as auth_module
 from fastapi import UploadFile, File, Form,Depends
+from fastapi.middleware.cors import CORSMiddleware
 import os
 import ingest
 import logging
@@ -32,6 +33,13 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down.")
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class AskRequest(BaseModel):
@@ -39,11 +47,18 @@ class AskRequest(BaseModel):
     question: str
     backend: str | None = None
     conversation_id: int | None = None
+    groq_api_key: str | None = None
+
+class SourceItem(BaseModel):
+    file: str | None = None
+    page: int | str | None = None
+    image_filename: str | None = None
 
 class AskResponse(BaseModel):
     answer: str
     backend_used: str
     conversation_id: int
+    sources: list[SourceItem] = []
 
 class IngestResponse(BaseModel):
     filename: str
@@ -145,41 +160,11 @@ def login(body: LoginRequest):
 
 @app.get("/auth/me")
 def auth_me(current_user: str = Depends(auth_module.get_current_user)):
-    """
-    Returns the currently authenticated user's ID.
-    Use this to test if your token is working.
-    """
     return {
         "user_id": current_user,
         "token_valid": True,
         "server_time_utc": datetime.now(timezone.utc).isoformat()
     }
-"""
-@app.post("/auth/debug-token")
-def debug_token(token: str = Form(...)):
-
-    try:
-        # Decode without verification to inspect payload
-        unverified = jwt.decode(token, options={"verify_signature": False})
-        
-        # Try full verification
-        verified_user = auth_module.verify_token(token)
-        
-        return {
-            "unverified_payload": unverified,
-            "verified_user": verified_user,
-            "secret_key_first_10": auth_module.SECRET_KEY[:10] + "...",
-            "algorithm": auth_module.ALGORITHM,
-            "token_valid": True
-        }
-    except Exception as e:
-        return {
-            "unverified_payload": jwt.decode(token, options={"verify_signature": False}) if token.count('.') == 2 else None,
-            "error": str(e),
-            "error_type": type(e).__name__,
-            "token_valid": False
-        }
-"""
 @app.post("/ask", response_model=AskResponse)
 def ask(
     body: AskRequest,
@@ -199,12 +184,15 @@ def ask(
         conversation_memory = get_active_memory(current_user)
 
     chunks = rag.retrieve_chunks(body.question, collection, embed_model)
-    answer = rag.generate_answer(body.question, chunks, backend=body.backend, memory=conversation_memory)
+    answer, sources = rag.generate_answer(
+        body.question, chunks, backend=body.backend, memory=conversation_memory, groq_api_key=body.groq_api_key
+    )
 
     return AskResponse(
         answer=answer,
         backend_used=body.backend or config.LLM_BACKEND,
-        conversation_id=conversation_memory.conversation_id
+        conversation_id=conversation_memory.conversation_id,
+        sources=sources
     )
 
 
@@ -228,12 +216,14 @@ def ask_stream(
     chunks = rag.retrieve_chunks(body.question, collection, embed_model)
     
     def event_generator():
+        sources_holder = {}
         for token in rag.generate_answer_stream(
-            body.question, chunks, backend=body.backend, memory=conversation_memory
+            body.question, chunks, backend=body.backend, memory=conversation_memory,
+            sources_out=sources_holder, groq_api_key=body.groq_api_key
         ):
             yield f"data: {json.dumps({'token': token})}\n\n"
         
-        yield f"data: {json.dumps({'done': True, 'conversation_id': conversation_memory.conversation_id, 'backend_used': body.backend or config.LLM_BACKEND})}\n\n"
+        yield f"data: {json.dumps({'done': True, 'conversation_id': conversation_memory.conversation_id, 'backend_used': body.backend or config.LLM_BACKEND, 'sources': sources_holder.get('sources', [])})}\n\n"
     
     return StreamingResponse(
         event_generator(),
@@ -322,6 +312,28 @@ def list_documents(
     ]
     
     return DocumentListResponse(documents=documents)
+
+
+@app.get("/documents/image/{filename}")
+def get_document_image(
+    filename: str,
+    current_user: str = Depends(auth_module.get_current_user),
+):
+    """
+    Serve a diagram image extracted during ingestion, scoped to the current user's
+    own figures directory. `filename` must be a bare basename (no path separators) --
+    this is what stops someone from walking out of the figures folder with `../..`.
+    """
+    safe_filename = os.path.basename(filename)
+    if safe_filename != filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    figures_dir = config.get_user_figures_dir(current_user)
+    file_path = os.path.join(figures_dir, safe_filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    return FileResponse(file_path)
 
 
 @app.delete("/documents/{filename}", response_model=DeleteDocumentResponse)

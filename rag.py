@@ -1,13 +1,15 @@
 """
 RAG chain: given a user question, retrieve relevant chunks from ChromaDB,
-then ask the generator model to answer using that context (and any attached images)."""
+then ask the generator model to answer using that context."""
 
 import base64
+import os
 import config
 import llm_providers
 import logging
 from sentence_transformers import CrossEncoder
 import numpy as np
+from ingest import _tokenizer
 
 logger = logging.getLogger(__name__)
 _reranker = CrossEncoder('cross-encoder/mmarco-mMiniLMv2-L12-H384-v1')
@@ -15,8 +17,22 @@ def encode_image_base64(path: str) -> str:
     """Read an image file from disk and encode it as base64."""
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
-    
-#trim dynamically based on real token estimate, not a fixed number (max = top_k=4)
+def extract_sources(chunks: list[dict]) -> list[dict]:
+    seen = set()
+    sources = []
+    for chunk in chunks:
+        meta = chunk["metadata"]
+        key = (meta.get("source_file"), meta.get("page"))
+        if key in seen:
+            continue
+        seen.add(key)
+        image_path = meta.get("image_path") if meta.get("type") == "diagram" else None
+        sources.append({
+            "file": meta.get("source_file"),
+            "page": meta.get("page"),
+            "image_filename": os.path.basename(image_path) if image_path else None,
+        })
+    return sources
 IMAGE_TOKEN_ESTIMATE = 1000
 def fit_chunks_to_context(chunks: list[dict], max_context_tokens: int, reserved_for_answer: int = 1200) -> list[dict]:
     budget = max_context_tokens - reserved_for_answer
@@ -24,7 +40,8 @@ def fit_chunks_to_context(chunks: list[dict], max_context_tokens: int, reserved_
     running_total = 0
 
     for chunk in chunks:
-        content_tokens = len(chunk["content"]) // 3
+        #changed:
+        content_tokens = len(_tokenizer.encode(chunk["content"], add_special_tokens=False))
         has_image = chunk["metadata"].get("type") == "diagram" and chunk["metadata"].get("image_path")
         chunk_tokens = content_tokens + (IMAGE_TOKEN_ESTIMATE if has_image else 0)
 
@@ -53,27 +70,21 @@ def rerank_chunks(query: str, chunks: list[dict], top_n: int = 4) -> list[dict]:
     pairs = [(query, c["content"]) for c in chunks]
     scores = _reranker.predict(pairs)
     scored = sorted(zip(chunks, scores), key=lambda x: x[1], reverse=True)
-    seen_keys = set()
-    best_per_key = []
+    file_counts = {}
+    selected = []
     remaining = []
     for chunk, score in scored:
-        meta = chunk["metadata"]
-        key = (meta.get("source_file"), meta.get("page"), meta.get("type"))
-        if key not in seen_keys:
-            seen_keys.add(key)
-            best_per_key.append((chunk, score))
-        else:
+        file = chunk["metadata"].get("source_file")
+        if file_counts.get(file, 0) >= 2:
             remaining.append((chunk, score))
+            continue
+        file_counts[file] = file_counts.get(file, 0) + 1
+        selected.append((chunk, score))
 
-    selected = best_per_key[:top_n]
     if len(selected) < top_n:
         selected += remaining[:top_n - len(selected)]
-
-    # Re-sort by score so the strongest evidence still comes first in the prompt --
-    # diversification only changes WHICH chunks are kept, not their presentation order.
     selected.sort(key=lambda x: x[1], reverse=True)
     return [c for c, _ in selected[:top_n]]
-
 def build_prompt(query: str, chunks: list[dict], history_text: str = "", include_images: bool = True) -> tuple[str, list[str]]:
     #Assemble the full prompt: conversation history (if any) + retrieved context + question.
     text_context = ""
@@ -88,44 +99,29 @@ def build_prompt(query: str, chunks: list[dict], history_text: str = "", include
             images_b64.append(encode_image_base64(meta["image_path"]))
 
     history_section = f"CONVERSATION SO FAR:\n{history_text}\n\n" if history_text else ""
-    prompt = f"""{history_section}Based on the following context, answer the question clearly.
-CONTEXT:
+    prompt = f"""{history_section}Tu es un assistant scientifique rigoureux. Réponds à la question UNIQUEMENT d'après le contexte fourni ci-dessous.
+
+RÈGLES:
+1. Si l'information est présente (même sous une autre formulation ou dans un tableau), réponds de manière directe et concise.
+2. Si le contexte ne contient AUCUN élément permettant de répondre, dis : "Les documents fournis ne contiennent pas cette information."
+3. Si le contexte contient des éléments partiels ou indirects, utilise-les pour répondre au mieux — ne refuse pas par excès de prudence.
+4. Copie les nombres, hyperparamètres et résultats EXACTEMENT comme écrits (n'arrondis pas, n'infère pas).
+5. Si la question demande un chiffre, une dimension ou une valeur, cite-la explicitement avec son unité ou son contexte.
+6. Réponds dans la même langue que la question.
+7. Pas de tableaux Markdown (pas de |). Utilise des puces (-) et du texte brut.
+
+CONTEXTE:
 {text_context}
- 
+
 QUESTION: {query}
- 
-PRECISION:
-- Copy exact numbers (scores, hyperparameters, counts, measurements) exactly as written — never round, approximate, or infer a figure that isn't visibly present.
- 
-WHEN THE CONTEXT IS INSUFFICIENT (read carefully):
-- Judge sufficiency on SUBSTANCE, not wording: if the answer is present in different words, in a table row, or across two adjacent sentences, that counts — don't refuse just because it isn't phrased like the question. Loosely related content is NOT the same as an answer, though.
-- If the substance is genuinely absent, say so plainly ("the documents don't provide this information") instead of guessing or restating vague context as an answer — an honest gap always beats a plausible-sounding invention.
- 
-FOCUS (applies only once you've confirmed the context above actually answers the question):
-- Answer only what's asked — no unrequested background, related facts, or interpretation, even if true and present in the context.
-- Lead with the direct answer in the first sentence; don't preface with setup or restated context.
-- This governs HOW MUCH to say once you have an answer, not whether one exists — that judgment call belongs entirely to the section above.
- 
-LANGUAGE:
-- Answer in the SAME LANGUAGE as the question above. If the question is in French, answer in French; if in English, answer in English. Do not translate or switch languages.
- 
-CONVERSATION CONTEXT:
-- If the question refers back to something discussed earlier ("it", "that model", "the same dataset"), use the conversation history above to resolve what's being referred to.
- 
-IMAGES:
-- If an image is provided alongside the text, look at it directly to verify or add precision — don't rely only on the text description of it.
- 
-FORMATTING (this answer will be displayed in a plain chat bubble):
-- No LaTeX/math notation (\\( \\), \\frac{{}}) — write formulas in plain text, e.g. "Recall = TP / (TP + FN)". No Markdown tables (no | pipes); use a short bullet list instead.
-- Use short paragraphs and bullet points ("-"), not one dense block of text. Bold only key terms, not full sentences.
- 
-ANSWER:"""
+
+RÉPONSE:"""
     return prompt, images_b64
 
 _TEMPLATE_TOKENS = len(build_prompt("", [], "", include_images=False)[0]) // 4
 ANSWER_TOKEN_BUDGET = 500  # true free space intended for the model's generated answer text
 
-def generate_answer(query: str, chunks: list[dict], backend: str = None, memory=None) -> str:
+def generate_answer(query: str, chunks: list[dict], backend: str = None, memory=None, groq_api_key: str = None) -> str :
     #Retrieve-then-generate: build the prompt (with history) and call the configured LLM backend.
 
     backend = (backend or config.LLM_BACKEND).lower()
@@ -148,7 +144,7 @@ def generate_answer(query: str, chunks: list[dict], backend: str = None, memory=
     prompt, images_b64 = build_prompt(query, chunks, history_text, include_images=include_images)
 
     try:
-        provider = llm_providers.get_llm_provider(backend)
+        provider = llm_providers.get_llm_provider(backend, api_key=groq_api_key)
         answer = provider.generate(prompt, images=images_b64 if images_b64 else None)
     except Exception as e:
         logger.error(f"LLM generation failed: {e}")
@@ -158,7 +154,7 @@ def generate_answer(query: str, chunks: list[dict], backend: str = None, memory=
         memory.add_turn(query, answer)
 
     return answer
-def generate_answer_stream(query: str, chunks: list[dict], backend: str = None, memory=None):
+def generate_answer_stream(query: str, chunks: list[dict], backend: str = None, memory=None, sources_out: dict | None = None, groq_api_key: str = None):
     #Streaming responses: send each token to the browser as soon as it's generated.
     backend = (backend or config.LLM_BACKEND).lower()
     chunks = rerank_chunks(query, chunks, top_n=config.rerank_top_n)
@@ -177,9 +173,18 @@ def generate_answer_stream(query: str, chunks: list[dict], backend: str = None, 
         chunks = fit_chunks_to_context(chunks, config.CONTEXT_WINDOW, reserved_for_answer=reserved)
         if len(chunks) < original_count:
             logger.info(f"Trimmed context: {len(chunks)}/{original_count}")
-
+    if sources_out is not None:
+        sources_out["sources"] = extract_sources(chunks)
     prompt, images_b64 = build_prompt(query, chunks, history_text, include_images=include_images)
-    provider = llm_providers.get_llm_provider(backend)
+    try:
+        provider = llm_providers.get_llm_provider(backend, api_key=groq_api_key)
+    except Exception as e:
+        logger.error(f"LLM provider init failed: {e}")
+        error_msg = f"\n[Error: {e}]"
+        yield error_msg
+        if memory is not None:
+            memory.add_turn(query, error_msg)
+        return
 
     full_answer = ""
     try:

@@ -1,9 +1,6 @@
 # Metric functions for the two-part evaluation:
 #   Part 1 - retrieval metrics: did we fetch the right chunks?
 #   Part 2 - generation metrics: is the answer grounded in what we fetched (no hallucination)?
-#
-# Retrieval metrics compare against (source_file, page) pairs rather than exact chunk ids,
-# because chunk ids in ingest.embed_and_store are positional and shift when chunking changes.
 
 import json
 import logging
@@ -18,7 +15,6 @@ def _source_key(source_file: str, page) -> str:
 
 
 def chunks_to_source_keys(chunks: list[dict]) -> list[str]:
-    #Convert retrieved chunk dicts ({"content":..., "metadata":{...}}) into ordered source keys.
     keys = []
     for c in chunks:
         meta = c["metadata"]
@@ -33,12 +29,9 @@ def relevant_to_source_keys(relevant_sources: list[dict]) -> set:
     return {_source_key(r["source_file"], r["page"]) for r in relevant_sources}
 
 
-# ── Part 1: Retrieval metrics ────────────────────────────────────────────────
+#Part 1: Retrieval metrics
 
 def precision_at_k(retrieved_keys: list[str], relevant_keys: set, k: int) -> float:
-    #Divides by the *effective* k (min(k, len(retrieved_keys))) so a stage that
-    #intentionally returns fewer than k items (e.g. a reranker's top_n) isn't
-    #unfairly penalized against a fixed comparison window.
     effective_k = min(k, len(retrieved_keys))
     if effective_k <= 0:
         return 0.0
@@ -48,7 +41,7 @@ def precision_at_k(retrieved_keys: list[str], relevant_keys: set, k: int) -> flo
 
 def recall_at_k(retrieved_keys: list[str], relevant_keys: set, k: int) -> float:
     if not relevant_keys:
-        return None  # undefined for unanswerable questions -- handle separately
+        return None
     top_k = set(retrieved_keys[:k])
     return len(top_k & relevant_keys) / len(relevant_keys)
 
@@ -97,7 +90,7 @@ def retrieval_scorecard(retrieved_keys: list[str], relevant_keys: set, pool_k: i
     }
 
 
-# ── Part 2: Generation metrics (LLM-as-judge) ────────────────────────────────
+#Part 2: Generation metrics
 
 FAITHFULNESS_PROMPT = """You are a strict fact-checker. Below is a CONTEXT (retrieved
 document excerpts) and an ANSWER a system produced from that context.
@@ -152,7 +145,6 @@ def _is_pure_refusal(answer: str, max_len: int = 220) -> bool:
     return any(re.search(pat, lowered) for pat in REFUSAL_PATTERNS)
 
 def judge_faithfulness(context_text: str, answer: str, judge_provider) -> dict:
-    #Groundedness check: is the answer supported by the retrieved context? Core anti-hallucination metric.
     if _is_pure_refusal(answer):
         return {
             "faithful": 1.0,
@@ -172,7 +164,6 @@ def judge_relevancy(question: str, answer: str, judge_provider) -> dict:
 
 
 def judge_correctness(question: str, reference: str, candidate: str, judge_provider) -> dict:
-    #Only meaningful when the test case has a human-reviewed expected_answer (not "unreviewed").
     raw = judge_provider.generate(
         CORRECTNESS_PROMPT.format(question=question, reference=reference, candidate=candidate)
     )
@@ -189,9 +180,6 @@ def judge_correctness(question: str, reference: str, candidate: str, judge_provi
 
 
 def answer_similarity(reference_answer: str, answer: str, embed_model) -> float | None:
-    #Cosine similarity between the generated answer and the reference answer, using
-    #your own embedding model. Cheap (no extra LLM call) complement to the LLM-judge
-    #correctness score -- useful as a second opinion when the judge is self-grading.
     if not reference_answer or not answer:
         return None
     emb_ref = embed_model.encode(reference_answer)
@@ -202,8 +190,7 @@ def answer_similarity(reference_answer: str, answer: str, embed_model) -> float 
     return float(np.dot(emb_ref, emb_ans) / denom)
 
 
-def generation_scorecard(question: str, context_text: str, answer: str,
-                          reference_answer: str, judge_provider, embed_model=None) -> dict:
+def generation_scorecard(question: str, context_text: str, answer: str,reference_answer: str, judge_provider, embed_model=None) -> dict:
     #All generation metrics for one test case, bundled together.
     result = {}
     result.update(judge_faithfulness(context_text, answer, judge_provider))

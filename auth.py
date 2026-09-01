@@ -1,5 +1,4 @@
 # Authentication: JWT tokens + bcrypt password hashing.
-# Uses SQL Server (via memory.py engine) instead of SQLite.
 
 import os
 import logging
@@ -16,8 +15,6 @@ import memory as memory_module
 
 logger = logging.getLogger(__name__)
 
-# ── Config ─────────────────────────────────────────────────────────────────
-
 SECRET_KEY = getattr(config, 'JWT_SECRET_KEY', None)
 ALGORITHM = getattr(config, 'JWT_ALGORITHM', 'HS256')
 ACCESS_TOKEN_EXPIRE_DAYS = getattr(config, 'JWT_EXPIRE_DAYS', 7)
@@ -33,20 +30,16 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
-# ── JWT Token Lifecycle ────────────────────────────────────────────────────
+#JWT Token Lifecycle
 
 def create_access_token(user_id: str) -> str:
-    """
-    Create a JWT token valid for ACCESS_TOKEN_EXPIRE_DAYS.
-    Uses integer timestamp for 'exp' to avoid timezone serialization issues.
-    """
     now = datetime.now(timezone.utc)
     expire = now + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     
     payload = {
         "sub": user_id,
-        "iat": int(now.timestamp()),      # Issued at
-        "exp": int(expire.timestamp())    # Expiration as Unix timestamp
+        "iat": int(now.timestamp()),
+        "exp": int(expire.timestamp())
     }
     
     token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
@@ -55,10 +48,6 @@ def create_access_token(user_id: str) -> str:
 
 
 def decode_token(token: str) -> dict:
-    """
-    Decode and return the full payload. Raises HTTPException on any failure.
-    Logs the exact reason for debugging.
-    """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         logger.debug(f"[AUTH] Token decoded successfully: sub={payload.get('sub')}")
@@ -87,13 +76,9 @@ def verify_token(token: str) -> str:
     return user_id
 
 
-# ── FastAPI Dependency ─────────────────────────────────────────────────────
+#FastAPI Dependency
 
 def get_current_user(authorization: Optional[str] = Header(None)) -> str:
-    """
-    FastAPI dependency: extracts user_id from the Authorization header.
-    Expects: Authorization: Bearer <token>
-    """
     logger.debug(f"[AUTH] Received Authorization header: {authorization[:30] + '...' if authorization else 'None'}")
     
     if not authorization:
@@ -110,13 +95,9 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> str:
     return verify_token(token)
 
 
-# ── SQL Server User Management ─────────────────────────────────────────────
+#SQL Server User Management
 
 def ensure_password_column():
-    """
-    Ensure the users table has a password_hash column.
-    Raises RuntimeError with the exact SSMS fix if missing.
-    """
     with memory_module.engine.connect() as conn:
         result = conn.execute(text("""
             SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
@@ -133,10 +114,7 @@ def ensure_password_column():
 
 
 def register_user(user_id: str, password: str) -> bool:
-    """
-    Register a new user with a hashed password.
-    Returns True if created, False if user already exists.
-    """
+
     ensure_password_column()
     
     # Check if user already exists
@@ -165,7 +143,6 @@ def register_user(user_id: str, password: str) -> bool:
 
 
 def authenticate_user(user_id: str, password: str) -> Optional[str]:
-    #Verify credentials and return a JWT token if valid, or None if invalid.
     ensure_password_column()
     
     with memory_module.engine.connect() as conn:

@@ -1,11 +1,3 @@
-# Runs benchmark.json end-to-end through your actual retrieve -> rerank -> generate
-# pipeline and reports both retrieval and generation metrics. Run this after every
-# change (new chunking logic, new prompt, new model, new reranker...) and compare
-# against the previous run to know if you made things better or worse.
-#
-# Usage:
-#   python run_evaluation.py --user_id alice --benchmark benchmark.json --backend ollama
-
 import argparse
 import json
 import os
@@ -30,8 +22,6 @@ def load_benchmark(path: str) -> list[dict]:
 
 
 def build_context_text(chunks: list[dict]) -> str:
-    #Mirrors the text portion of rag.build_prompt, kept separate so the judge sees
-    #exactly what the generator saw without needing to touch rag.py.
     parts = []
     for c in chunks:
         meta = c["metadata"]
@@ -40,11 +30,6 @@ def build_context_text(chunks: list[dict]) -> str:
 
 
 def generate_answer_no_rerank(query: str, reranked_chunks: list[dict], backend: str) -> str:
-    #Mirrors rag.generate_answer exactly, EXCEPT it skips generate_answer's internal
-    #rerank_chunks(...) call, because run_one_case already reranked these chunks once.
-    #Calling rag.generate_answer directly here would rerank the same ~40 pairs a second
-    #time -- on CPU, with a heavier multilingual cross-encoder, that doubles a multi-minute
-    #cost for zero benefit (identical input, identical output).
     backend = (backend or config.LLM_BACKEND).lower()
     chunks = reranked_chunks
     include_images = backend != "groq"
@@ -64,7 +49,6 @@ def run_one_case(case: dict, collection, embed_model, backend: str, judge_provid
     translated_sources = translate_relevant_sources(case.get("relevant_sources", []), user_id)
     relevant_keys = em.relevant_to_source_keys(translated_sources)
 
-    # --- Retrieval stage (mirrors app.py / rag.py) ---
     t0 = time.time()
     raw_chunks = rag.retrieve_chunks(question, collection, embed_model, top_k=top_k)
     print(f"    retrieve_chunks: {time.time()-t0:.1f}s ({len(raw_chunks)} chunks)", flush=True)
@@ -78,7 +62,6 @@ def run_one_case(case: dict, collection, embed_model, backend: str, judge_provid
     reranked_keys = em.chunks_to_source_keys(reranked_chunks)
     retrieval_post_rerank = em.retrieval_scorecard(reranked_keys, relevant_keys, pool_k=config.rerank_top_n, metric_k=5)
 
-    # --- Generation stage (reuses your real pipeline, no memory for a clean standalone run) ---
     t0 = time.time()
     answer = generate_answer_no_rerank(question, reranked_chunks, backend)
     print(f"    generate_answer: {time.time()-t0:.1f}s", flush=True)
@@ -135,7 +118,6 @@ def compare_to_previous(current_agg: dict, threshold: float = 0.05) -> None:
 _page_map_cache: dict[str, dict] = {}
 
 def get_printed_to_physical_map(user_id: str, source_file: str) -> dict:
-    """Cached per fichier -- reconstruire la map nécessite de rouvrir le PDF, donc une seule fois."""
     cache_key = f"{user_id}::{source_file}"
     if cache_key in _page_map_cache:
         return _page_map_cache[cache_key]
@@ -157,7 +139,6 @@ def get_printed_to_physical_map(user_id: str, source_file: str) -> dict:
 
 
 def translate_relevant_sources(relevant_sources: list[dict], user_id: str) -> list[dict]:
-    """Convertit les pages imprimées du benchmark vers l'index physique Docling."""
     translated = []
     for r in relevant_sources:
         printed_page = str(r["page"])

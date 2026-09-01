@@ -14,7 +14,9 @@ data/documents/*
 data/figures/*
 !data/figures/.gitkeep
 
-
+Benchmark.json  #20 question
+Benchmark2.json #35 question
+eval_results/*
 # Environment/secrets (if you ever add API keys, HF tokens, etc.)
 .env
 
