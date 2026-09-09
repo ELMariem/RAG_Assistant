@@ -103,7 +103,7 @@ def build_prompt(query: str, chunks: list[dict], history_text: str = "", include
 
 RÈGLES:
 1. Si l'information est présente (même sous une autre formulation ou dans un tableau), réponds de manière directe et concise.
-2. Si le contexte ne contient AUCUN élément permettant de répondre, dis : "Les documents fournis ne contiennent pas cette information."
+2. Si le contexte ne contient AUCUN élément permettant de répondre, dis :"The documents don't provide this information." or "Les documents fournis ne contiennent pas cette information."
 3. Si le contexte contient des éléments partiels ou indirects, utilise-les pour répondre au mieux — ne refuse pas par excès de prudence.
 4. Copie les nombres, hyperparamètres et résultats EXACTEMENT comme écrits (n'arrondis pas, n'infère pas).
 5. Si la question demande un chiffre, une dimension ou une valeur, cite-la explicitement avec son unité ou son contexte.

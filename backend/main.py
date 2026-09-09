@@ -33,6 +33,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down.")
 
 app = FastAPI(lifespan=lifespan)
+ 
+# Allows the React dev server (localhost:5173) to call this API directly.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -47,7 +49,7 @@ class AskRequest(BaseModel):
     question: str
     backend: str | None = None
     conversation_id: int | None = None
-    groq_api_key: str | None = None
+    groq_api_key: str | None = None  # user's own key, used only if the server has none configured
 
 class SourceItem(BaseModel):
     file: str | None = None
@@ -160,11 +162,41 @@ def login(body: LoginRequest):
 
 @app.get("/auth/me")
 def auth_me(current_user: str = Depends(auth_module.get_current_user)):
+    """
+    Returns the currently authenticated user's ID.
+    Use this to test if your token is working.
+    """
     return {
         "user_id": current_user,
         "token_valid": True,
         "server_time_utc": datetime.now(timezone.utc).isoformat()
     }
+"""
+@app.post("/auth/debug-token")
+def debug_token(token: str = Form(...)):
+
+    try:
+        # Decode without verification to inspect payload
+        unverified = jwt.decode(token, options={"verify_signature": False})
+        
+        # Try full verification
+        verified_user = auth_module.verify_token(token)
+        
+        return {
+            "unverified_payload": unverified,
+            "verified_user": verified_user,
+            "secret_key_first_10": auth_module.SECRET_KEY[:10] + "...",
+            "algorithm": auth_module.ALGORITHM,
+            "token_valid": True
+        }
+    except Exception as e:
+        return {
+            "unverified_payload": jwt.decode(token, options={"verify_signature": False}) if token.count('.') == 2 else None,
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "token_valid": False
+        }
+"""
 @app.post("/ask", response_model=AskResponse)
 def ask(
     body: AskRequest,

@@ -35,7 +35,7 @@ DOCX_MAX_ASPECT_RATIO = 1.7
 
 # LLM BACKEND
 LLM_BACKEND = "ollama"   # "ollama" (local/private) or "groq" (cloud/fast)
-GROQ_MODEL = "openai/gpt-oss-120b"        # model used for previous tests
+GROQ_MODEL = "openai/gpt-oss-20b"        # model used for previous tests
 
 GROQ_VISION_MODEL = "qwen/qwen3.6-27b"     # image-attached questions — separate multimodal model
 
