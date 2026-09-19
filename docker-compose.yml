@@ -11,17 +11,11 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY}
       OLLAMA_HOST: http://host.docker.internal:11434
     extra_hosts:
-      # Lets the container resolve 'host.docker.internal' to your Windows machine,
-      # where SQL Server and Ollama are still running. Docker Desktop usually
-      # provides this automatically, but declaring it explicitly makes the
-      # compose file portable if this ever runs on native Linux Docker later.
+
       - "host.docker.internal:host-gateway"
     volumes:
-      # Without these, the container only sees its own empty data/documents and
-      # chroma_db folders created at build time -- your real PDFs and vector
-      # store live on Windows and need to be mounted in explicitly.
-      - ./data:/app/data
-      - ./chroma_db:/app/chroma_db
+      - ./backend/data:/app/data
+      - ./backend/chroma_db:/app/chroma_db
     restart: unless-stopped
 
   frontend:
